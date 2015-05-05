@@ -1,25 +1,25 @@
-# Copyright (c) 2014, the Mipster Project Authors.  All rights reserved.
-# Please see the AUTHORS file for details.  Use of this source code is governed
-# by a BSD license that can be found in the LICENSE file.
+.PHONY: default all clean test
+default: test
+#default: all
 
-include ../cross-common.mk
+all: parser
+
+CC=gcc
+
+clean:
+	-rm *.o
+	-rm parser
+
+test: parser
+	#./parser < parser.c
+
+parser: scanner.o parser.o
+	$(CC) -o parser scanner.o parser.o
+
+scanner.o: scanner.c
+	$(CC) -o scanner.o -c scanner.c
+
+parser.o: parser.c
+	$(CC) -o parser.o -c parser.c
 
 
-LIBC_PATH=../skeleton-mipster-libc
-OBJECTS += \
-    scanner.o \
-    testbed.o \
-    $(LIBC_PATH)/mipster.a
-CFLAGS += -nostdlib -I$(LIBC_PATH)
-LDFLAGS += -nostdlib
-BINARY=a.out
-
-all: libc_cc cross_link
-
-clean: cross_clean
-	make -C $(LIBC_PATH) clean
-
-libc_cc:
-	make -C $(LIBC_PATH) all
-
-include ../cross-cc-mipster.mk

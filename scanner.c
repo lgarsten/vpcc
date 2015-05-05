@@ -1,8 +1,8 @@
-#include "mipster.h"
+#include <stdio.h>
+#include <stdlib.h>
 
-int *character; // most recently read *character
-int symbol; // most recently recognized symbol
-
+int character; // most recently read character
+//int symbol; // most recently recognized symbol
 
 // tokens
 
@@ -16,7 +16,7 @@ int WHILE;
 int ELSE;
 int RETURN;
 
-// special *character and operator tokens
+// special character and operator tokens
 int SEMICOLON;
 int ASTERISK;
 int LPARENS;
@@ -32,22 +32,33 @@ int GTEQ;
 //int LT;
 int LTEQ;
 int COMMA;
+//int ;
+//int ;
+//int ;
+//int ;
+//int ;
+//int ;
 
+// FIXME: add new tokens here!
+
+//...
 
 int* identifier; // stores scanned identifier
 int integer; // stores scanned integer
 
-// maximum number of *characters in an identifier
+// maximum number of characters in an identifier
 // set as needed
 int maxIdentifierLength;
+int lineNR;
 
-
+// prototypes
+static char *intstr_to_charstr(int *is);
+static char *get_token_name(int sym);
 
 int init_scanner() {
-	character = mipster_malloc(sizeof(int));
-	*character = mipster_getchar();
-	
+	character = getchar();
 	maxIdentifierLength = 64;
+	lineNR = 1;
 
 	// other tokens
 	IDENTIFIER	= 1;
@@ -61,7 +72,7 @@ int init_scanner() {
 	ELSE		= 8;
 	RETURN		= 9;
 
-	// special *character and operator tokens
+	// special character and operator tokens
 	SEMICOLON	= 101;
 	ASTERISK	= 102;
 	LPARENS		= 103;
@@ -96,24 +107,24 @@ int getSymbol() {
 
 	if (findNextCharacter() == -1)
 		return -1;
-//printf("c: %c (%d)\n", *character, *character);
+	//printf("c: %c (%d)\n", character, character);
 
 	if (isCharacterLetter()) {
 		// found identifier or keyword
-		identifier = mipster_malloc(maxIdentifierLength * 4);
+		identifier = malloc(maxIdentifierLength * 4);
 
 		identifierCursor = identifier;
 		identifierLength = 1;
 
 		while (isCharacterLetterOrDigitOrUnderscore()) {
 			if (identifierLength >= maxIdentifierLength)
-				mipster_exit(-1); // identifier too long
+				exit(-1); // identifier too long
 
-			*identifierCursor = *character;
+			*identifierCursor = character;
 			identifierCursor = identifierCursor + 1;
 			identifierLength = identifierLength + 1;
 
-			*character = mipster_getchar();
+			character = getchar();
 
 		}
 
@@ -127,75 +138,75 @@ int getSymbol() {
 
 		while (isCharacterDigit()) {
 			// caution: overflows remain undetected
-			integer = integer * 10 + *character - 48;
+			integer = integer * 10 + character - 48;
 
-			*character = mipster_getchar();
+			character = getchar();
 		}
 
 		return INTEGER;
-	} else if (*character == 59) { // ASCII code 59 = ;
-		*character = mipster_getchar();
+	} else if (character == 59) { // ASCII code 59 = ;
+		character = getchar();
 
 		return SEMICOLON;
 
-	} else if (*character == 42) { // "*" => 42
-		*character = mipster_getchar();
+	} else if (character == 42) { // "*" => 42
+		character = getchar();
 		return ASTERISK;
 
-	} else if (*character == 40) { // "(" => 40
-		*character = mipster_getchar();
+	} else if (character == 40) { // "(" => 40
+		character = getchar();
 		return LPARENS;
 
-	} else if (*character == 41) { // ")" => 41
-		*character = mipster_getchar();
+	} else if (character == 41) { // ")" => 41
+		character = getchar();
 		return RPARENS;
 
-	} else if (*character == 123) { // "{" => 123
-		*character = mipster_getchar();
+	} else if (character == 123) { // "{" => 123
+		character = getchar();
 		return LBRACE;
 
-	} else if (*character == 125) { // "}" => 125
-		*character = mipster_getchar();
+	} else if (character == 125) { // "}" => 125
+		character = getchar();
 		return RBRACE;
 
-	} else if (*character == 61) { // "=" => 61
-		*character = mipster_getchar();
+	} else if (character == 61) { // "=" => 61
+		character = getchar();
 
-		if (*character == 61) { // "=" => 61
-			*character = mipster_getchar();
+		if (character == 61) { // "=" => 61
+			character = getchar();
 			return EQUAL;
 		} else
 			return ASSIGN;
 
-	} else if (*character == 43) { // "+" => 43
-		*character = mipster_getchar();
+	} else if (character == 43) { // "+" => 43
+		character = getchar();
 		return PLUS;
 
-	} else if (*character == 45) { // "=" => 45
-		*character = mipster_getchar();
+	} else if (character == 45) { // "=" => 45
+		character = getchar();
 		return MINUS;
 
-	} else if (*character == 62) { // ">" => 62
-		*character = mipster_getchar();
+	} else if (character == 62) { // ">" => 62
+		character = getchar();
 
-		if (*character == 61) { // "=" => 61
-			*character = mipster_getchar();
+		if (character == 61) { // "=" => 61
+			character = getchar();
 			return GTEQ;
 		} else
-			mipster_exit(-1); //return GT;
+			exit(-1); //return GT;
 
-	} else if (*character == 60) { // "<" => 60
-		*character = mipster_getchar();
+	} else if (character == 60) { // "<" => 60
+		character = getchar();
 
-		if (*character == 61) { // "=" => 61
-			*character = mipster_getchar();
+		if (character == 61) { // "=" => 61
+			character = getchar();
 			return LTEQ;
 		} else
-			mipster_exit(-1); //return LT;
+			exit(-1); //return LT;
 
 
-	} else if (*character == 44) { // "," => 44
-		*character = mipster_getchar();
+	} else if (character == 44) { // "," => 44
+		character = getchar();
 		return COMMA;
 
 	//} else if ( ... ) {
@@ -203,69 +214,83 @@ int getSymbol() {
 	///...
 
 	} else
-		mipster_exit(-1); // unknown *character
+		exit(-1); // unknown character
 }
 
-// consume input until next *character is found. ignores whitespace, comments
+int getSymbol2() {
+	int token;
+
+	token = getSymbol2();
+
+	printf("Token: %s (%d)\n", get_token_name(token), token);
+	if(token == IDENTIFIER)	printf("\t'%s'\n", intstr_to_charstr(identifier));
+	if(token == INTEGER) 		printf("\t%d\n", integer);
+
+	return token;
+}
+
+// consume input until next character is found. ignores whitespace, comments
 // and preprocessor directives. return value of -1 indicates
 // error condition (such as end of file) - treat as clean end of input
 // condition even if it is an actual error. return value >0 indicates ASCII
-// *character code also stored in variable "*character".
+// character code also stored in variable "character".
 int findNextCharacter() {
 	int inComment; // are we scanning a comment?
 	inComment = 0;
 
 	while (1) {
 		if (inComment) {
-			*character = mipster_getchar();
+			character = getchar();
 
-			if (*character == 10) // ASCII code 10 = linefeed
+			if (character == 10) // ASCII code 10 = linefeed
 				inComment = 0;
-			else if (*character == 13) // ASCII code 13 = carriage return
+			else if (character == 13) // ASCII code 13 = carriage return
 				inComment = 0;
-			else if (*character == -1) // end of file is represented by -1
-				return *character;
+			else if (character == -1) // end of file is represented by -1
+				return character;
 		} else if (isCharacterWhitespace())
-			*character = mipster_getchar();
-		else if (*character == 35) { // ACCII code 35 = #
-			*character = mipster_getchar();
+			character = getchar();
+		else if (character == 35) { // ACCII code 35 = #
+			character = getchar();
 
 			inComment = 1;
-		} else if (*character == 47) { // ASCII code 47 = /
-			*character = mipster_getchar();
+		} else if (character == 47) { // ASCII code 47 = /
+			character = getchar();
 
-			if (*character == 47) { // ASCII code 47 = /
-				*character = mipster_getchar();
+			if (character == 47) { // ASCII code 47 = /
+				character = getchar();
 
 				inComment = 1;
 			} else
-				return *character;
+				return character;
 		} else
-			return *character;
+			return character;
 	}
 }
 
 int isCharacterWhitespace() {
-	if (*character == 32) // ASCII code 32 = space
+	if (character == 32) // ASCII code 32 = space
 		return 1;
-	else if (*character == 9) // ASCII code 9 = tab
+	else if (character == 9) // ASCII code 9 = tab
 		return 1;
-	else if (*character == 10) // ASCII code 10 = linefeed
+	else if (character == 10) { // ASCII code 10 = linefeed
+		lineNR = lineNR + 1;
 		return 1;
-	else if (*character == 13) // ASCII code 13 = carriage return
+	}
+	else if (character == 13) // ASCII code 13 = carriage return
 		return 1;
 	else
 		return 0;
 }
 
 int isCharacterLetter() {
-	if (*character >= 97)	  // ASCII code 97 = a
-		if (*character <= 122) // ASCII code 122 = z
+	if (character >= 97)	  // ASCII code 97 = a
+		if (character <= 122) // ASCII code 122 = z
 			return 1;
 		else
 			return 0;
-	else if (*character >= 65) // ASCII code 65 = A
-		if (*character <= 90)  // ASCII code 90 = Z
+	else if (character >= 65) // ASCII code 65 = A
+		if (character <= 90)  // ASCII code 90 = Z
 			return 1;
 		else
 			return 0;
@@ -406,7 +431,35 @@ int identifierOrKeyword() {
 		else
 			return IDENTIFIER;
 
+	} else if (*identifierCursor == 118) { // ASCII code 118 = v
+		// looking for "void"
+		// "void" => 118 111 105 100
+
+		identifierCursor = identifierCursor + 1;
+
+		if (*identifierCursor == 111) // ASCII code 111 = o
+			identifierCursor = identifierCursor + 1;
+		else
+			return IDENTIFIER;
+
+		if (*identifierCursor == 105) // ASCII code 105 = i
+			identifierCursor = identifierCursor + 1;
+		else
+			return IDENTIFIER;
+
+		if (*identifierCursor == 100) // ASCII code 100 = d
+			identifierCursor = identifierCursor + 1;
+		else
+			return IDENTIFIER;
+
+
+		if (*identifierCursor == 0) // end of identifier?
+			return VOID;
+		else
+			return IDENTIFIER;
+
 		//...
+
 	} else
 		// no keyword found
 		return IDENTIFIER;
@@ -414,9 +467,9 @@ int identifierOrKeyword() {
 	return -1; // can't-happen to indicate unhandled case!
 }
 int isCharacterDigit() {
-	if (*character <= 47)	  // ASCII code 47 = /
+	if (character <= 47)	  // ASCII code 47 = /
 		return 0;
-	if (*character >= 58)	  // ASCII code 58 = :
+	if (character >= 58)	  // ASCII code 58 = :
 		return 0;
 	return 1;
 }
@@ -428,12 +481,65 @@ int isCharacterLetterOrDigit() {
 int isCharacterLetterOrDigitOrUnderscore() {
 	if(isCharacterLetter()) return 1;
 	if(isCharacterLetter()) return 1;
-	if(*character == 95) return 1; // '_' = 95
+	if(character == 95) return 1; // '_' = 95
 	return 0;
 }
 
 
-// help me read the output!
-int endoffile;
 
 
+
+
+char *get_token_name(int sym) {
+	if(sym == -1)			return "end of input";
+	if(sym == -2)			return "error";
+
+	// other tokens
+	if(sym == IDENTIFIER)	return "IDENTIFIER";
+	if(sym == INTEGER)		return "INTEGER";
+
+	// keyword tokens
+	if(sym == VOID)			return "VOID";
+	if(sym == IF)			return "IF";
+	if(sym == INT)			return "INT";
+	if(sym == WHILE)		return "WHILE";
+	if(sym == ELSE)			return "ELSE";
+	if(sym == RETURN)		return "RETURN";
+
+	// special character and operator tokens
+	if(sym == SEMICOLON)	return "SEMICOLON";
+	if(sym == ASTERISK)		return "ASTERISK";
+	if(sym == LPARENS)		return "LPARENS";
+	if(sym == RPARENS)		return "RPARENS";
+	if(sym == LBRACE)		return "LBRACE";
+	if(sym == RBRACE)		return "RBRACE";
+	if(sym == EQUAL)		return "EQUAL";
+	if(sym == PLUS)			return "PLUS";
+	if(sym == MINUS)		return "MINUS";
+	if(sym == ASSIGN)		return "ASSIGN";
+//	if(sym == GT)			return "GT";
+	if(sym == GTEQ)			return "GTEQ";
+//	if(sym == LT)			return "LT";
+	if(sym == LTEQ)			return "LTEQ";
+	if(sym == COMMA)		return "COMMA";
+//	if(sym == )	return "";
+//	if(sym == )	return "";
+//	if(sym == )	return "";
+//	if(sym == )	return "";
+//	if(sym == )	return "";
+//	if(sym == )	return "";
+//	if(sym == )	return "";
+
+	// FIXME: add new tokens here!
+
+	return "unknown";
+}
+
+static char *intstr_to_charstr(int *is) {
+	int length = 0;
+	char *cs = malloc(maxIdentifierLength);
+
+	while((cs[length] = is[length]) != 0) length++;
+
+	return cs;
+}

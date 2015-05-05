@@ -6,6 +6,7 @@ int getSymbol();
 
 extern int* identifier; // stores scanned identifier
 extern int integer; // stores scanned integer
+extern int lineNR;
 
 extern int maxIdentifierLength;
 
@@ -38,14 +39,9 @@ extern int GTEQ;
 //extern int LT;
 extern int LTEQ;
 extern int COMMA;
-//extern int ;
-//extern int ;
-//extern int ;
-//extern int ;
-//extern int ;
-//extern int ;
+extern int SLASH;
 
-// FIXME: add new tokens here!
 
 
 #endif
+
