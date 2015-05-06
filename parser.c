@@ -32,8 +32,9 @@ int isSymbolAsteriskOrSlash();
 void variableORprocedure();
 
 // print help functions
-static char *get_token_name(int sym);
-static char *intstr_to_charstr(int *is);
+
+// remove SELF PARSING
+char *get_token_name(int sym);
 
 // error codes
 
@@ -193,11 +194,12 @@ int main() {
 
 //This is a dynamically allocated, list-based implementation of a symbol table in C*, extend as needed.
 
-int syntaxError(int error_code) {
-	char *err = "ERROR";
-	printf("Syntax Error at %d %d %s\n",lineNR ,0, err);
+int syntaxError(int errorcode) {
+	// remove SELF PARSING
+	printf("Syntax Error at %d\n",lineNR);
 }
 
+// remove SELF PARSING
 char *get_token_name(int sym) {
 	if(sym == -1)			return "end of input";
 	if(sym == -2)			return "error";
@@ -225,15 +227,16 @@ char *get_token_name(int sym) {
 	if(sym == PLUS)			return "PLUS";
 	if(sym == MINUS)		return "MINUS";
 	if(sym == ASSIGN)		return "ASSIGN";
-//	if(sym == GT)			return "GT";
+	//if(sym == GT)			return "GT";
 	if(sym == GTEQ)			return "GTEQ";
-//	if(sym == LT)			return "LT";
+	//if(sym == LT)			return "LT";
 	if(sym == LTEQ)			return "LTEQ";
 	if(sym == COMMA)		return "COMMA";
 
 	return "unknown";
 }
 
+// remove SELF PARSING
 void debug(char *msg, int codeLine) {
 	printf("D: %s, SYM: %s, Lahead: %s, LINENR: %d, CODE %d\n",msg, get_token_name(symbol), get_token_name(lookahead), lineNR, codeLine);
 }
@@ -577,11 +580,17 @@ void factor() {
     }
 
     if (symbol == IDENTIFIER) {
-        allocatedRegisters = allocatedRegisters + 1;
+    	   // call()
+    	   if (lookahead == LPARENS) {
+    	        call();
+    	   }
+    	   // variable
+    	   else {
+		   allocatedRegisters = allocatedRegisters + 1;
 
-        //emitCode(LDW, allocatedRegisters, GP, getGlobalVariableOffset());
-
-        getCurrentSymbol();
+		   //emitCode(LDW, allocatedRegisters, GP, getGlobalVariableOffset());
+		   getCurrentSymbol();
+        }
     } 
     else if (symbol == INTEGER) {
         allocatedRegisters = allocatedRegisters + 1;
