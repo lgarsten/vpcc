@@ -6,7 +6,6 @@ int getSymbol();
 
 extern int* identifier; // stores scanned identifier
 extern int integer; // stores scanned integer
-extern int lineNR;
 
 extern int maxIdentifierLength;
 
@@ -39,29 +38,14 @@ extern int GTEQ;
 //extern int LT;
 extern int LTEQ;
 extern int COMMA;
-extern int SLASH;
-extern int NOT;
-extern int NOTEQ;
+//extern int ;
+//extern int ;
+//extern int ;
+//extern int ;
+//extern int ;
+//extern int ;
 
-// error codes
-int E_EXPRESSION;
-int E_TERM;
-int E_WHILE;
-int E_PROCEDURE;
-int E_CALL;
-int E_FACTOR;
-int E_CAST;
-int E_IF;
-int E_DECLARATION;
-int E_ASSIGNMENT;
-int E_VARIABLE;
-int E_STATEMENT;
-int E_VOID;
-int E_TYPE;
-int E_RELATION_EXPRESSION;
-int E_RETURN;
-int E_ELSE;
-int E_VARIABLEORPOCEDURE;
+// FIXME: add new tokens here!
+
 
 #endif
-

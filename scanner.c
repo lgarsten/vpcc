@@ -2,7 +2,8 @@
 #include <stdlib.h>
 
 int character; // most recently read character
-//int symbol; // most recently recognized symbol
+int symbol; // most recently recognized symbol
+int lookahead;
 
 // tokens
 
@@ -34,16 +35,28 @@ int LTEQ;
 int COMMA;
 int NOT;
 int NOTEQ;
-//int ;
-//int ;
-//int ;
-//int ;
-//int ;
-//int ;
 
-// FIXME: add new tokens here!
 
-//...
+// error codes
+int E_EXPRESSION;
+int E_TERM;
+int E_WHILE;
+int E_PROCEDURE;
+int E_CALL;
+int E_FACTOR;
+int E_CAST;
+int E_IF;
+int E_DECLARATION;
+int E_ASSIGNMENT;
+int E_VARIABLE;
+int E_STATEMENT;
+int E_VOID;
+int E_TYPE;
+int E_RELATION_EXPRESSION;
+int E_RETURN;
+int E_ELSE;
+int E_VARIABLEORPOCEDURE;
+
 
 int* identifier; // stores scanned identifier
 int integer; // stores scanned integer
@@ -55,7 +68,10 @@ int lineNR;
 
 // prototypes
 static char *intstr_to_charstr(int *is);
-static char *get_token_name(int sym);
+char *get_token_name(int sym);
+void printError(int errorcode);
+void printDebug(int errorcode);
+char *get_error_msg(int errorcode);
 
 int init_scanner() {
 	character = getchar();
@@ -93,14 +109,8 @@ int init_scanner() {
      NOT			= 116;
 	NOTEQ		= 117;
 //			= 118;
-//			= 119;
-//			= 120;
-
 
 	// FIXME: add new tokens here!
-	// perl -e 'print "//\t\t\t= $_;\n" for(108..120)'
-
-
 }
 
 int getSymbol() {
@@ -226,18 +236,6 @@ int getSymbol() {
 
 	} else
 		exit(-1); // unknown character
-}
-
-int getSymbol2() {
-	int token;
-
-	token = getSymbol2();
-
-	printf("Token: %s (%d)\n", get_token_name(token), token);
-	if(token == IDENTIFIER)	printf("\t'%s'\n", intstr_to_charstr(identifier));
-	if(token == INTEGER) 		printf("\t%d\n", integer);
-
-	return token;
 }
 
 // consume input until next character is found. ignores whitespace, comments
@@ -496,11 +494,6 @@ int isCharacterLetterOrDigitOrUnderscore() {
 	return 0;
 }
 
-
-
-
-
-
 char *get_token_name(int sym) {
 	if(sym == -1)			return "end of input";
 	if(sym == -2)			return "error";
@@ -534,15 +527,45 @@ char *get_token_name(int sym) {
 	if(sym == LTEQ)			return "LTEQ";
 	if(sym == COMMA)		return "COMMA";
 //	if(sym == )	return "";
-//	if(sym == )	return "";
-//	if(sym == )	return "";
-//	if(sym == )	return "";
-//	if(sym == )	return "";
-//	if(sym == )	return "";
-//	if(sym == )	return "";
 
 	// FIXME: add new tokens here!
 
+	return "unknown";
+}
+
+void printError(int errorcode) {
+	char *msg;
+	msg = get_error_msg(errorcode);
+	
+	printf("Syntax error at: %d %s \n", lineNR, msg);
+}
+
+void printDebug(int errorcode) {
+	char *msg;
+	msg = get_error_msg(errorcode);
+	
+	printf("D: %s, SYM: %s, Lahead: %s, LINENR: %d \n",msg, get_token_name(symbol), get_token_name(lookahead), lineNR);
+}
+
+char *get_error_msg(int errorcode) {
+	if (errorcode == E_EXPRESSION) 		return "expression";
+	if (errorcode == E_TERM) 			return "term";
+	if (errorcode == E_WHILE) 			return "while";
+	if (errorcode == E_PROCEDURE) 		return "procedure";
+	if (errorcode == E_CALL) 			return "call";
+	if (errorcode == E_FACTOR) 			return "factor";
+	if (errorcode == E_IF) 				return "if";
+	if (errorcode == E_DECLARATION) 		return "declaration";
+	if (errorcode == E_ASSIGNMENT) 		return "assignment";
+	if (errorcode == E_VARIABLE) 			return "variable";
+	if (errorcode == E_STATEMENT) 		return "statement";
+	if (errorcode == E_VOID) 			return "void";
+	if (errorcode == E_TYPE) 			return "type";
+	if (errorcode == E_RELATION_EXPRESSION) return "relation_expression";
+	if (errorcode == E_RETURN) 			return "return";
+	if (errorcode == E_ELSE) 			return "else";
+	if (errorcode == E_VARIABLEORPOCEDURE) 	return "variableORprocedure";	
+	
 	return "unknown";
 }
 

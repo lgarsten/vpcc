@@ -11,7 +11,7 @@ clean:
 	-rm parser
 
 test: parser
-	#./parser < parser.c
+	./parser < parser.c
 
 parser: scanner.o parser.o
 	$(CC) -o parser scanner.o parser.o

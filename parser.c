@@ -26,23 +26,10 @@ void fixlink(int codeAddress);
 void statement();
 void assignment();
 
-int syntaxError(int error_code);
+void syntaxError(int error_code);
 int isSymbolPlusOrMinus();
 int isSymbolAsteriskOrSlash();
 void variableORprocedure();
-
-// print help functions
-
-// remove SELF PARSING
-char *get_token_name(int sym);
-
-// error codes
-
-int PROCEDURE;
-int CALL;
-int FACTOR;
-int CAST;
-int E_IF;
 
 //The following variable declarations, initialization code, and code generation facilities should be completed to a full C* compiler in an assignment. Instructions are encoded in 32-bit integers. Code is written to standard output in binary format.
 
@@ -80,21 +67,42 @@ int symbol;
 // lookahead of one
 int lookahead;
 
+// ERROR 
+void syntaxError(int errorcode) {
+	printError(errorcode);
+}
+
+// and DEBUG
+void debug(int errorcode) {
+	printDebug(errorcode);
+}
+
 void getCurrentSymbol() {
 	symbol = lookahead;
 	lookahead = getSymbol();
 }
 
 void initParser() {
-
-	PROCEDURE = 4;
-	CALL = 5;
-	FACTOR = 6;
-	CAST = 7;
+	E_EXPRESSION = 1;
+	E_TERM = 2;
+	E_WHILE = 3;
+	E_PROCEDURE = 4;
+	E_CALL = 5;
+	E_FACTOR = 6;
+	E_CAST = 7;
 	E_IF = 8;
+	E_DECLARATION = 9;
+	E_ASSIGNMENT = 10;
+	E_VARIABLE = 11;	
+	E_STATEMENT = 12;
+	E_VOID = 13;
+	E_TYPE = 14;
+	E_RELATION_EXPRESSION = 15;
+	E_RETURN = 16;
+	E_ELSE = 17;
+	E_VARIABLEORPOCEDURE = 18;
 	
-	lookahead = getSymbol();
-	
+	lookahead = getSymbol();	
 }
 
 void emitExit() {
@@ -174,15 +182,16 @@ int main() {
 
     // similarly, emit library code for malloc, getchar, and putchar
     //...
+    
      // init scanner
-	init_scanner();
+    init_scanner();
 	// init parser
-	initParser();
+    initParser();
 
     // get first symbol from scanner
     getCurrentSymbol();
 
-    // invoke compiler, implement missing procedures
+    // invoke compiler
     cstar();
 
     // write code to standard output
@@ -193,53 +202,6 @@ int main() {
 //-----------------------------
 
 //This is a dynamically allocated, list-based implementation of a symbol table in C*, extend as needed.
-
-int syntaxError(int errorcode) {
-	// remove SELF PARSING
-	printf("Syntax Error at %d\n",lineNR);
-}
-
-// remove SELF PARSING
-char *get_token_name(int sym) {
-	if(sym == -1)			return "end of input";
-	if(sym == -2)			return "error";
-
-	// other tokens
-	if(sym == IDENTIFIER)	return "IDENTIFIER";
-	if(sym == INTEGER)		return "INTEGER";
-
-	// keyword tokens
-	if(sym == VOID)			return "VOID";
-	if(sym == IF)			return "IF";
-	if(sym == INT)			return "INT";
-	if(sym == WHILE)		return "WHILE";
-	if(sym == ELSE)			return "ELSE";
-	if(sym == RETURN)		return "RETURN";
-
-	// special character and operator tokens
-	if(sym == SEMICOLON)	return "SEMICOLON";
-	if(sym == ASTERISK)		return "ASTERISK";
-	if(sym == LPARENS)		return "LPARENS";
-	if(sym == RPARENS)		return "RPARENS";
-	if(sym == LBRACE)		return "LBRACE";
-	if(sym == RBRACE)		return "RBRACE";
-	if(sym == EQUAL)		return "EQUAL";
-	if(sym == PLUS)			return "PLUS";
-	if(sym == MINUS)		return "MINUS";
-	if(sym == ASSIGN)		return "ASSIGN";
-	//if(sym == GT)			return "GT";
-	if(sym == GTEQ)			return "GTEQ";
-	//if(sym == LT)			return "LT";
-	if(sym == LTEQ)			return "LTEQ";
-	if(sym == COMMA)		return "COMMA";
-
-	return "unknown";
-}
-
-// remove SELF PARSING
-void debug(char *msg, int codeLine) {
-	printf("D: %s, SYM: %s, Lahead: %s, LINENR: %d, CODE %d\n",msg, get_token_name(symbol), get_token_name(lookahead), lineNR, codeLine);
-}
 
 int createSymbolTableEntry(int data) {
     int* symbolTableCursor;
@@ -309,19 +271,18 @@ int identifierMatch(int* symbolTableIdentifier) {
 //Here is the above recursive-descent parser decorated into a single-pass compiler that generates DLX code for arithmetic expressions in C*. Assignments are to be done as part of an assignment.
 
 void cstar() {
-	debug("cstar", __LINE__);
 	variableORprocedure();
 }
 
 void variableORprocedure() {
-	debug("variableORprocedure", __LINE__);
+	debug(E_VARIABLEORPOCEDURE);
 	while (symbol != -1) {
 		if (symbol == VOID) {			
 			getCurrentSymbol();
 			if (symbol == ASTERISK) {
 				getCurrentSymbol();
 			}
-			debug("void", __LINE__);
+			debug(E_VOID);
 			procedure();
 		}
 		else if (type()) {
@@ -333,7 +294,8 @@ void variableORprocedure() {
 			}
 		}
 		else {
-			syntaxError(0);
+			syntaxError(E_VARIABLEORPOCEDURE);
+			getCurrentSymbol();
 		}
 	}
 }
@@ -341,32 +303,32 @@ void variableORprocedure() {
 // local var, function parameter
 void declaration() {
 	type();
-	debug("declaration", __LINE__);
+	debug(E_DECLARATION);
 	if (symbol == IDENTIFIER) {
 		getCurrentSymbol();
 	}
 	else {
-		syntaxError(0);
+		syntaxError(E_DECLARATION);
 	}
 }
 
 // global var
 void variable() {
-	debug("variable", __LINE__);
+	debug(E_VARIABLE);
 	if (symbol == IDENTIFIER) {
 		getCurrentSymbol();
 		if (symbol == SEMICOLON) {
 			getCurrentSymbol();
 		}
 		else {
-			syntaxError(0);
+			syntaxError(E_VARIABLE);
 		}
 	}
 }
 
 int type() {
 	if (symbol == INT) {
-		debug("type",__LINE__);
+		debug(E_TYPE);
 		getCurrentSymbol();
 		
 		if (symbol == ASTERISK) {
@@ -380,7 +342,7 @@ int type() {
 }
 
 void statement() {
-	debug("statement", __LINE__);
+	debug(E_STATEMENT);
 
 	if (symbol == WHILE) {
 		whileStatement();
@@ -415,13 +377,18 @@ void statement() {
 			getCurrentSymbol();
 		}
 	}
+	// Local variables dont have to be declared on top of the function (TODO mb remove because not in EBNF)
+	else if (symbol == INT) {
+		declaration();
+		getCurrentSymbol();
+	}
 	else {
-		syntaxError(0);
+		syntaxError(E_STATEMENT);
 	}
 }
 
 void assignment() {
-	debug("assigment", __LINE__);
+	debug(E_ASSIGNMENT);
 	if (symbol == ASTERISK) {
 		getCurrentSymbol();
 	}
@@ -433,16 +400,15 @@ void assignment() {
 		}
 	}
 	else {
-		syntaxError(0);
+		syntaxError(E_ASSIGNMENT);
 	}
-
 }
 
 int relation_expression() {
-	debug("relation_expression", __LINE__);
+	debug(E_RELATION_EXPRESSION);
 	
 	expression();
-	
+	// TODO add LT GT
 	if (symbol == EQUAL) {
 		getCurrentSymbol();
 		expression();
@@ -464,7 +430,7 @@ int relation_expression() {
 }
 
 int expression() {
-	debug("expression", __LINE__);
+   debug(E_EXPRESSION);
     // assert: n = allocatedRegisters
 
     // have we parsed a minus sign?
@@ -514,7 +480,7 @@ int expression() {
 }
 
 void term() {
-    debug("term",__LINE__);	
+    debug(E_TERM);	
     // assert: n = allocatedRegisters
 
     // remember operator symbol
@@ -544,24 +510,25 @@ void term() {
 
 void cast() {
     if (symbol == LPARENS) {
+    
        if (lookahead == INT) {
-		   debug("cast", __LINE__);
-		   getCurrentSymbol();
+		 debug(E_CAST);
+		 getCurrentSymbol();
 		   
-		   type();
+		 type();
 		   
-		   if (symbol == RPARENS) {
-		       getCurrentSymbol();
-		   }
-		   else {
-		       syntaxError(CAST); // right parenthesis expected!
-		   }
-	   }
+		 if (symbol == RPARENS) {
+		     getCurrentSymbol();
+		 }
+		 else {
+		     syntaxError(E_CAST); // right parenthesis expected!
+		 }
+	   }   
     }
 }
 
 void factor() {
-    debug("factor", __LINE__);
+    debug(E_FACTOR);
     // assert: n = allocatedRegisters
 
     // have we parsed an asterisk sign?
@@ -580,7 +547,7 @@ void factor() {
     }
 
     if (symbol == IDENTIFIER) {
-    	   // call()
+    	   // call
     	   if (lookahead == LPARENS) {
     	        call();
     	   }
@@ -607,11 +574,11 @@ void factor() {
             getCurrentSymbol();
         }
         else {
-            syntaxError(FACTOR); // right parenthesis expected!
+            syntaxError(E_FACTOR); // right parenthesis expected!
         }
     } 
     else {
-        syntaxError(FACTOR); // identifier, integer, or left parenthesis expected!
+        syntaxError(E_FACTOR); // identifier, integer, or left parenthesis expected!
     }
 
     //if (dereference)
@@ -652,7 +619,7 @@ int allocateGlobalVariable() {
 //While statements are compiled as follows. Conditional statements are analogous and should be done as part of an assignment.
 
 void whileStatement() {
-	debug("while", __LINE__);
+	debug(E_WHILE);
     // assert: allocatedRegisters == 0
 
     // both must be local variables to work for nested while statements
@@ -669,7 +636,7 @@ void whileStatement() {
         getCurrentSymbol();
     }
     else {
-        syntaxError(WHILE); // while expected!
+        syntaxError(E_WHILE); // while expected!
     }
 
     if (symbol == LPARENS) {
@@ -699,10 +666,10 @@ void whileStatement() {
             getCurrentSymbol();
         }
         else {
-            syntaxError(WHILE); // right parenthesis expected!
+            syntaxError(E_WHILE); // right parenthesis expected!
         }
     } else {
-        syntaxError(WHILE); // left parenthesis expected!
+        syntaxError(E_WHILE); // left parenthesis expected!
     }
 
     // assert: allocatedRegisters == 0
@@ -730,7 +697,7 @@ void whileStatement() {
 }
 
 void ifStatement() {
-	debug("if", __LINE__);
+	debug(E_IF);
 
     if (symbol == IF) {
         getCurrentSymbol();
@@ -767,7 +734,7 @@ void ifStatement() {
     }
 
     if (symbol == ELSE) {
-    	   debug("else", __LINE__);
+    	   debug(E_ELSE);
         getCurrentSymbol();
         
         if (symbol == LBRACE) {
@@ -796,7 +763,7 @@ void fixup(int codeAddress) {
 //Procedure calls are (in principle) done as follows. Note that (in reality) the procedure identifier needs to be parsed before invoking call and then passed into call (by factor and statement) because the grammar (for factor and statement) is not fully left-factored. In other words, the parser can only know if it is dealing with a variable access or a procedure call after it has seen the symbol that appears after the identifier, i.e., if the parser then sees a left parenthesis (call) or not (identifier). This is called a lookahead of two (which can nevertheless be reduced to one by left factoring).
 
 void call() {
-	debug("call", __LINE__);
+	debug(E_CALL);
     // assert: n = allocatedRegisters
 
     // both must be local variables to work for nested expressions
@@ -812,11 +779,11 @@ void call() {
         savedAllocatedRegisters = allocatedRegisters;
 
         // save allocated registers on stack
-      /*  while (allocatedRegisters > 0) {
-            emit(PSH, allocatedRegisters, SP, 4);
+      //  while (allocatedRegisters > 0) {
+      //      emit(PSH, allocatedRegisters, SP, 4);
 
-            allocatedRegisters = allocatedRegisters - 1;
-        }*/
+      //      allocatedRegisters = allocatedRegisters - 1;
+      //  }
 
         // assert: allocatedRegisters == 0
 
@@ -851,13 +818,13 @@ void call() {
                     getCurrentSymbol();
                 }
                 else {
-                    syntaxError(CALL); // right parenthesis expected!
+                    syntaxError(E_CALL); // right parenthesis expected!
                 }
             } else {
                 getCurrentSymbol();
             }
         } else {
-            syntaxError(CALL); // left parenthesis expected!
+            syntaxError(E_CALL); // left parenthesis expected!
         }
 
         // restore procedure identifier for symbol table lookup
@@ -865,64 +832,64 @@ void call() {
 
         //procedureAddress = setProcedureAddress();
 
-       /* if (procedureAddress == codeLength)
+       // if (procedureAddress == codeLength)
             // create a new fixup chain
             //emit(BSR, 0, 0, 0);
-        else if (getOpcodeFromCode(procedureAddress) == BSR)
+       // else if (getOpcodeFromCode(procedureAddress) == BSR)
             // link to the head of an existing fixup chain
             //emit(BSR, 0, 0, procedureAddress);
-        else
+       // else
             // branch to subroutine to invoke procedure
             //emit(BSR, 0, 0, procedureAddress - codeLength);
-		*/
+		
         // assert: allocatedRegisters == 0
 
         // restore allocated registers from stack
-        /*while (allocatedRegisters < savedAllocatedRegisters) {
-            allocatedRegisters = allocatedRegisters + 1;
+      //  while (allocatedRegisters < savedAllocatedRegisters) {
+      //      allocatedRegisters = allocatedRegisters + 1;
 
-            emit(POP, allocatedRegisters, SP, 4);
-        }*/
+      //      emit(POP, allocatedRegisters, SP, 4);
+      //  }
     } else {
-        syntaxError(CALL); // identifier expected!
+        syntaxError(E_CALL); // identifier expected!
     }
-
     // assert: allocatedRegisters == n
 }
 //-----------------------------
 
 //Store procedure addresses in symbol table and create fixup chains for forward declarations.
 
-/*int setProcedureAddress() {
-    int* symbolTableCursor;
-    int savedAddress;
+//int setProcedureAddress() {
+//    int* symbolTableCursor;
+//    int savedAddress;
 
-    symbolTableCursor = getSymbolTableEntry();
+//    symbolTableCursor = getSymbolTableEntry();
 
-    if (symbolTableCursor != 0) {
-        symbolTableCursor = symbolTableCursor + 2;
+//    if (symbolTableCursor != 0) {
+//        symbolTableCursor = symbolTableCursor + 2;
 
-        savedAddress = *symbolTableCursor;
+//        savedAddress = *symbolTableCursor;
 
-        if (getOpcodeFromCode(savedAddress) == BSR)
+//        if (getOpcodeFromCode(savedAddress) == BSR)
             // save address of next instruction which may point to
             // the new head of an existing fixup chain
             // or the beginning of a procedure body
-            *symbolTableCursor = codeLength;
+//            *symbolTableCursor = codeLength;
 
-        return savedAddress;
-    } else
+//        return savedAddress;
+//    } else
         // procedure not found but who cares,
         // just create entry in symbol table,
         // and save address of next instruction
-        return createSymbolTableEntry(codeLength);
-}*/
+//        return createSymbolTableEntry(codeLength);
+//}
+
 //-----------------------------
 
 //Procedure definitions are next. Here the construction of the local symbol table containing the parameters and local variables of a procedure is still to be done as part of an assignment. Also, the access of parameters and local variables still needs to be implemented (in factor and assignment).
 
 void procedure() {
-	debug("procedure", __LINE__);
+	debug(E_PROCEDURE);
     // assert: allocatedRegisters == 0
 
     // may be global variables but are anyway nicer like that
@@ -930,33 +897,33 @@ void procedure() {
     int parameters;
     int localVariables;
 
-   /* if (symbol == INTEGER) {
-        getCurrentSymbol();
-
-        if (symbol == ASTERISK) {
-            getCurrentSymbol();
-        }
-    } 
-    else if (symbol == VOID) {
-        getCurrentSymbol();
-    }
-    else {
-        syntaxError(PROCEDURE); // int expected!
-    }*/
+  //  if (symbol == INTEGER) {
+  //      getCurrentSymbol();
+  //
+  //      if (symbol == ASTERISK) {
+  //          getCurrentSymbol();
+  //      }
+  //  } 
+  //  else if (symbol == VOID) {
+  //      getCurrentSymbol();
+  //  }
+  //  else {
+  //      syntaxError(PROCEDURE); // int expected!
+  //  }
 
 	if (symbol == IDENTIFIER) {
        // callBranches = setProcedureAddress();
 		getCurrentSymbol();
 		
 
-        /*if (callBranches != codeLength) {
-            if (getOpcodeFromCode(callBranches) == BSR)
-                fixlink(callBranches);
-            }
-            else {
+        //if (callBranches != codeLength) {
+        //    if (getOpcodeFromCode(callBranches) == BSR)
+        //        fixlink(callBranches);
+        //    }
+        //    else {
                 // procedure defined more than once!
-                declarationError(PROCEDURE);
-            }*/
+        //        declarationError(PROCEDURE);
+        //    }
 
 		if (symbol == LPARENS) {
 			
@@ -984,17 +951,16 @@ void procedure() {
                 //...
 
                 if (symbol == RPARENS) {
-                
                     getCurrentSymbol();
                 }
                 else {
-                    syntaxError(PROCEDURE); // right parenthesis expected!
+                    syntaxError(E_PROCEDURE); // right parenthesis expected!
                 }
             } else {  	 
                 getCurrentSymbol();
             }
         } else {
-            syntaxError(PROCEDURE); // left parenthesis expected!
+            syntaxError(E_PROCEDURE); // left parenthesis expected!
         }
 
         if (symbol == SEMICOLON) {
@@ -1016,7 +982,7 @@ void procedure() {
                     getCurrentSymbol();
                 }
                 else {
-                    syntaxError(PROCEDURE); // semicolon expected!
+                    syntaxError(E_PROCEDURE); // semicolon expected!
                 }
             }
 
@@ -1060,10 +1026,10 @@ void procedure() {
             //emit(RET, 0, 0, LINK);
            
         } else {
-            syntaxError(PROCEDURE); // semicolon or left braces expected!
+            syntaxError(E_PROCEDURE); // semicolon or left braces expected!
         }
     } else {
-        syntaxError(PROCEDURE); // identifier expected!
+        syntaxError(E_PROCEDURE); // identifier expected!
     }
 
     // assert: allocatedRegisters == 0
@@ -1111,7 +1077,7 @@ void fixlink(int codeAddress) {
 //Return statements only need to make sure that the return value of procedures are stored in RR before returning.
 
 void returnStatement() {
-    debug("return", __LINE__);
+    debug(E_RETURN);
     // assert: allocatedRegisters == 0
 
     if (symbol == RETURN) {
@@ -1166,5 +1132,3 @@ void returnStatement() {
 //variableORprocedure = ( "void" | type ) LOOKAHEAD -> ( ";" variable | "(" procedure) .
 
 //cstar = { variableORprocedure } .
-
-
