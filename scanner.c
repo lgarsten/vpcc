@@ -32,6 +32,8 @@ int GTEQ;
 //int LT;
 int LTEQ;
 int COMMA;
+int NOT;
+int NOTEQ;
 //int ;
 //int ;
 //int ;
@@ -65,31 +67,31 @@ int init_scanner() {
 	INTEGER		= 2;
 
 	// keyword tokens
-	VOID		= 3;
+	VOID			= 3;
 	IF			= 5;
 	INT			= 6;
 	WHILE		= 7;
-	ELSE		= 8;
+	ELSE			= 8;
 	RETURN		= 9;
 
 	// special character and operator tokens
-	SEMICOLON	= 101;
-	ASTERISK	= 102;
+	SEMICOLON		= 101;
+	ASTERISK		= 102;
 	LPARENS		= 103;
 	RPARENS		= 104;
 	LBRACE		= 105;
 	RBRACE		= 106;
 	EQUAL		= 107;
-	PLUS		= 108;
+	PLUS			= 108;
 	MINUS		= 109;
 	ASSIGN		= 110;
 //	GT			= 111;
-	GTEQ		= 112; // greater than or equal
+	GTEQ			= 112; // greater than or equal
 //	LT			= 113;
-	LTEQ		= 114; // less than or equal
+	LTEQ			= 114; // less than or equal
 	COMMA		= 115;
-//			= 116;
-//			= 117;
+     NOT			= 116;
+	NOTEQ		= 117;
 //			= 118;
 //			= 119;
 //			= 120;
@@ -169,6 +171,15 @@ int getSymbol() {
 		character = getchar();
 		return RBRACE;
 
+	} else if (character == 33) { // "!" => 61
+		character = getchar();
+
+		if (character == 61) { // "=" => 61
+			character = getchar();
+			return NOTEQ;
+		} else
+			return NOT;
+			
 	} else if (character == 61) { // "=" => 61
 		character = getchar();
 
@@ -326,7 +337,7 @@ int identifierOrKeyword() {
 		else
 			return IDENTIFIER;
 
-		if (*identifierCursor == 108) // ASCII code 109 = e
+		if (*identifierCursor == 101) // ASCII code 109 = e
 			identifierCursor = identifierCursor + 1;
 		else
 			return IDENTIFIER;
@@ -384,7 +395,7 @@ int identifierOrKeyword() {
 		else
 			return IDENTIFIER;
 
-		if (*identifierCursor == 101) // ASCII code 101 = 1
+		if (*identifierCursor == 101) // ASCII code 101 = e
 			identifierCursor = identifierCursor + 1;
 		else
 			return IDENTIFIER;
@@ -401,7 +412,7 @@ int identifierOrKeyword() {
 
 		identifierCursor = identifierCursor + 1;
 
-		if (*identifierCursor == 101) // ASCII code 101 = 1
+		if (*identifierCursor == 101) // ASCII code 101 = e
 			identifierCursor = identifierCursor + 1;
 		else
 			return IDENTIFIER;

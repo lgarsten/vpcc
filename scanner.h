@@ -40,6 +40,8 @@ extern int GTEQ;
 extern int LTEQ;
 extern int COMMA;
 extern int SLASH;
+extern int NOT;
+extern int NOTEQ;
 
 
 

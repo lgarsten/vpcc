@@ -7,6 +7,7 @@ void emitExit();
 void cstar();
 int* getSymbolTableEntry();
 int identifierMatch(int* symbolTableIdentifier);
+int relation_expression();
 int expression();
 void term();
 void cast();
@@ -14,12 +15,16 @@ void factor();
 int getGlobalVariableOffset();
 int allocateGlobalVariable();
 void whileStatement();
+void ifStatement();
+void returnStatement();
 void fixup(int codeAddress);
 void call();
 int setProcedureAddress();
 void procedure();
 void variable();
 void fixlink(int codeAddress);
+void statement();
+void assignment();
 
 int syntaxError(int error_code);
 int isSymbolPlusOrMinus();
@@ -36,6 +41,7 @@ int PROCEDURE;
 int CALL;
 int FACTOR;
 int CAST;
+int E_IF;
 
 //The following variable declarations, initialization code, and code generation facilities should be completed to a full C* compiler in an assignment. Instructions are encoded in 32-bit integers. Code is written to standard output in binary format.
 
@@ -84,6 +90,7 @@ void initParser() {
 	CALL = 5;
 	FACTOR = 6;
 	CAST = 7;
+	E_IF = 8;
 	
 	lookahead = getSymbol();
 	
@@ -223,15 +230,6 @@ char *get_token_name(int sym) {
 //	if(sym == LT)			return "LT";
 	if(sym == LTEQ)			return "LTEQ";
 	if(sym == COMMA)		return "COMMA";
-//	if(sym == )	return "";
-//	if(sym == )	return "";
-//	if(sym == )	return "";
-//	if(sym == )	return "";
-//	if(sym == )	return "";
-//	if(sym == )	return "";
-//	if(sym == )	return "";
-
-	// FIXME: add new tokens here!
 
 	return "unknown";
 }
@@ -308,6 +306,7 @@ int identifierMatch(int* symbolTableIdentifier) {
 //Here is the above recursive-descent parser decorated into a single-pass compiler that generates DLX code for arithmetic expressions in C*. Assignments are to be done as part of an assignment.
 
 void cstar() {
+	debug("cstar", __LINE__);
 	variableORprocedure();
 }
 
@@ -316,6 +315,9 @@ void variableORprocedure() {
 	while (symbol != -1) {
 		if (symbol == VOID) {			
 			getCurrentSymbol();
+			if (symbol == ASTERISK) {
+				getCurrentSymbol();
+			}
 			debug("void", __LINE__);
 			procedure();
 		}
@@ -374,7 +376,92 @@ int type() {
 	}
 }
 
+void statement() {
+	debug("statement", __LINE__);
+
+	if (symbol == WHILE) {
+		whileStatement();
+	}
+	else if (symbol == IF) {
+		ifStatement();
+	}
+	else if (symbol == RETURN) {
+		returnStatement();
+		getCurrentSymbol();
+	}
+	else if (symbol == ASTERISK) {
+		getCurrentSymbol();
+		if (symbol == IDENTIFIER) {
+			if (lookahead == ASSIGN) {
+				assignment();
+				getCurrentSymbol();
+			}
+			else {
+				call();
+				getCurrentSymbol();
+			}
+		}
+	}
+	else if (symbol == IDENTIFIER) {
+		if (lookahead == ASSIGN) {
+			assignment();
+			getCurrentSymbol();
+		}
+		else {
+			call();
+			getCurrentSymbol();
+		}
+	}
+	else {
+		syntaxError(0);
+	}
+}
+
+void assignment() {
+	debug("assigment", __LINE__);
+	if (symbol == ASTERISK) {
+		getCurrentSymbol();
+	}
+	if (symbol == IDENTIFIER) {
+		getCurrentSymbol();
+		if (symbol == ASSIGN) {
+			getCurrentSymbol();
+			expression();
+		}
+	}
+	else {
+		syntaxError(0);
+	}
+
+}
+
+int relation_expression() {
+	debug("relation_expression", __LINE__);
+	
+	expression();
+	
+	if (symbol == EQUAL) {
+		getCurrentSymbol();
+		expression();
+	}
+	else if (symbol == NOTEQ) {
+		getCurrentSymbol();
+		expression();
+	}
+	else if (symbol == GTEQ) {
+		getCurrentSymbol();
+		expression();
+	}
+	else if (symbol == LTEQ) {
+		getCurrentSymbol();
+		expression();
+	}
+	
+	return 0;
+}
+
 int expression() {
+	debug("expression", __LINE__);
     // assert: n = allocatedRegisters
 
     // have we parsed a minus sign?
@@ -387,17 +474,18 @@ int expression() {
 
     if (symbol == MINUS) {
         sign = 1;
-
         getCurrentSymbol();
-    } else
+    } else {
         sign = 0;
+    }
 
     term();
 
     // assert: allocatedRegisters == n + 1
 
-    if (sign)
+    if (sign) {
         //emitCode(SUB, allocatedRegisters, ZR, allocatedRegisters);
+    }
 
     while (isSymbolPlusOrMinus()) {
         operatorSymbol = symbol;
@@ -423,6 +511,7 @@ int expression() {
 }
 
 void term() {
+    debug("term",__LINE__);	
     // assert: n = allocatedRegisters
 
     // remember operator symbol
@@ -452,26 +541,24 @@ void term() {
 
 void cast() {
     if (symbol == LPARENS) {
-        getCurrentSymbol();
-
-        if (symbol == INTEGER) {
-            getCurrentSymbol();
-
-            if (symbol == ASTERISK)
-                getCurrentSymbol();
-        } else
-            syntaxError(CAST); // int expected!
-
-        if (symbol == RPARENS) {
-            getCurrentSymbol();
-        }
-        else {
-            syntaxError(CAST); // right parenthesis expected!
-        }
+       if (lookahead == INT) {
+		   debug("cast", __LINE__);
+		   getCurrentSymbol();
+		   
+		   type();
+		   
+		   if (symbol == RPARENS) {
+		       getCurrentSymbol();
+		   }
+		   else {
+		       syntaxError(CAST); // right parenthesis expected!
+		   }
+	   }
     }
 }
 
 void factor() {
+    debug("factor", __LINE__);
     // assert: n = allocatedRegisters
 
     // have we parsed an asterisk sign?
@@ -484,7 +571,8 @@ void factor() {
         dereference = 1;
 
         getCurrentSymbol();
-    } else {
+    } 
+    else {
         dereference = 0;
     }
 
@@ -494,15 +582,16 @@ void factor() {
         //emitCode(LDW, allocatedRegisters, GP, getGlobalVariableOffset());
 
         getCurrentSymbol();
-    } else if (symbol == INTEGER) {
+    } 
+    else if (symbol == INTEGER) {
         allocatedRegisters = allocatedRegisters + 1;
 
         //emitCode(ADDI, allocatedRegisters, ZR, integer);
 
         getCurrentSymbol();
-    } else if (symbol == LPARENS) {
+    } 
+    else if (symbol == LPARENS) {
         getCurrentSymbol();
-
         expression();
 
         if (symbol == RPARENS) {
@@ -511,8 +600,10 @@ void factor() {
         else {
             syntaxError(FACTOR); // right parenthesis expected!
         }
-    } else
+    } 
+    else {
         syntaxError(FACTOR); // identifier, integer, or left parenthesis expected!
+    }
 
     //if (dereference)
         //emitCode(LDW, allocatedRegisters, allocatedRegisters, 0);
@@ -552,6 +643,7 @@ int allocateGlobalVariable() {
 //While statements are compiled as follows. Conditional statements are analogous and should be done as part of an assignment.
 
 void whileStatement() {
+	debug("while", __LINE__);
     // assert: allocatedRegisters == 0
 
     // both must be local variables to work for nested while statements
@@ -564,18 +656,23 @@ void whileStatement() {
     // remember address of next instruction to loop back to below
     branchBackwardsToWhile = codeLength;
 
-    if (symbol == WHILE)
+    if (symbol == WHILE) {
         getCurrentSymbol();
-    else
+    }
+    else {
         syntaxError(WHILE); // while expected!
+    }
 
     if (symbol == LPARENS) {
         // enhance expression() to return BEQ, BNE, etc.
         // depending on parsed comparison operator
         // hint 1: instruction must be the negation!
         // hint 2: if there is no comparison use BEQ
-        branchInstruction = expression();
-
+        getCurrentSymbol();
+        
+        //branchInstruction = expression(); // EDIT
+	   branchInstruction = relation_expression();	
+		
         // remember address of next instruction which
         // conditionally branches forward to end of while
         // if parsed comparison evaluates to false!
@@ -589,12 +686,15 @@ void whileStatement() {
         // do not need the register for comparison anymore
         allocatedRegisters = allocatedRegisters - 1;
 
-        if (symbol == RPARENS)
+        if (symbol == RPARENS) {
             getCurrentSymbol();
-        else
+        }
+        else {
             syntaxError(WHILE); // right parenthesis expected!
-    } else
+        }
+    } else {
         syntaxError(WHILE); // left parenthesis expected!
+    }
 
     // assert: allocatedRegisters == 0
 
@@ -602,12 +702,12 @@ void whileStatement() {
         getCurrentSymbol();
 
         while (symbol != RBRACE) {
-            //statement();
+            statement();
         }
 
         getCurrentSymbol();
     } else {
-        //statement();
+        statement();
     }
 
     // assert: allocatedRegisters == 0
@@ -618,6 +718,62 @@ void whileStatement() {
     // here will be the first instruction after the loop
     // so point the conditional branch instruction from above here
     fixup(branchForwardToEndOfWhile);
+}
+
+void ifStatement() {
+	debug("if", __LINE__);
+
+    if (symbol == IF) {
+        getCurrentSymbol();
+    }
+    else {
+        syntaxError(IF); // if expected!
+    }
+
+    if (symbol == LPARENS) {
+        getCurrentSymbol();
+        
+	   relation_expression();	
+
+        if (symbol == RPARENS) {
+            getCurrentSymbol();
+        }
+        else {
+            syntaxError(E_IF); // right parenthesis expected!
+        }
+    } else {
+        syntaxError(E_IF); // left parenthesis expected!
+    }
+
+    if (symbol == LBRACE) {
+        getCurrentSymbol();
+
+        while (symbol != RBRACE) {
+            statement();
+        }
+
+        getCurrentSymbol();
+    } else {
+        statement();
+    }
+
+    if (symbol == ELSE) {
+    	   debug("else", __LINE__);
+        getCurrentSymbol();
+        
+        if (symbol == LBRACE) {
+            getCurrentSymbol();
+            
+            while (symbol != RBRACE) {
+            	statement();
+            } 
+            getCurrentSymbol();
+        }
+        else {
+           statement();
+        }
+    }
+    
 }
 
 void fixup(int codeAddress) {
@@ -631,6 +787,7 @@ void fixup(int codeAddress) {
 //Procedure calls are (in principle) done as follows. Note that (in reality) the procedure identifier needs to be parsed before invoking call and then passed into call (by factor and statement) because the grammar (for factor and statement) is not fully left-factored. In other words, the parser can only know if it is dealing with a variable access or a procedure call after it has seen the symbol that appears after the identifier, i.e., if the parser then sees a left parenthesis (call) or not (identifier). This is called a lookahead of two (which can nevertheless be reduced to one by left factoring).
 
 void call() {
+	debug("call", __LINE__);
     // assert: n = allocatedRegisters
 
     // both must be local variables to work for nested expressions
@@ -646,11 +803,11 @@ void call() {
         savedAllocatedRegisters = allocatedRegisters;
 
         // save allocated registers on stack
-        while (allocatedRegisters > 0) {
-            //emit(PSH, allocatedRegisters, SP, 4);
+      /*  while (allocatedRegisters > 0) {
+            emit(PSH, allocatedRegisters, SP, 4);
 
             allocatedRegisters = allocatedRegisters - 1;
-        }
+        }*/
 
         // assert: allocatedRegisters == 0
 
@@ -670,7 +827,6 @@ void call() {
 
                 while (symbol == COMMA) {
                     getCurrentSymbol();
-
                     expression();
 
                     // push value of expression (actual parameter) onto stack
@@ -682,14 +838,18 @@ void call() {
                     // assert: allocatedRegisters == 0
                 }
 
-                if (symbol == RPARENS)
+                if (symbol == RPARENS) {
                     getCurrentSymbol();
-                else
+                }
+                else {
                     syntaxError(CALL); // right parenthesis expected!
-            } else
+                }
+            } else {
                 getCurrentSymbol();
-        } else
+            }
+        } else {
             syntaxError(CALL); // left parenthesis expected!
+        }
 
         // restore procedure identifier for symbol table lookup
         identifier = procedureIdentifier;
@@ -709,13 +869,14 @@ void call() {
         // assert: allocatedRegisters == 0
 
         // restore allocated registers from stack
-        while (allocatedRegisters < savedAllocatedRegisters) {
+        /*while (allocatedRegisters < savedAllocatedRegisters) {
             allocatedRegisters = allocatedRegisters + 1;
 
-            //emit(POP, allocatedRegisters, SP, 4);
-        }
-    } else
+            emit(POP, allocatedRegisters, SP, 4);
+        }*/
+    } else {
         syntaxError(CALL); // identifier expected!
+    }
 
     // assert: allocatedRegisters == n
 }
@@ -868,7 +1029,7 @@ void procedure() {
             returnBranches = 0;
 
             while (symbol != RBRACE) {
-               // statement();
+            	statement();
             }
 		               
             getCurrentSymbol();
@@ -941,12 +1102,15 @@ void fixlink(int codeAddress) {
 //Return statements only need to make sure that the return value of procedures are stored in RR before returning.
 
 void returnStatement() {
+    debug("return", __LINE__);
     // assert: allocatedRegisters == 0
 
-    if (symbol == RETURN)
+    if (symbol == RETURN) {
         getCurrentSymbol();
-    else
+    }
+    else {
         syntaxError(RETURN); // return expected;
+    }
 
     if (symbol != SEMICOLON) {
         expression();
@@ -973,6 +1137,7 @@ void returnStatement() {
 
 //type = "int" [ "*" ] .
 
+//relation_expression = expression [ ( "<=" | "==" | ">=" | "!=" ) expression ]                        
 //expression = simpleExpression [ ( "==" | "!=" | "<" | ">" | "<=" | ">=" ) simpleExpression ] .
 //simpleExpression = [ "-" ] term { ( "+" | "-" ) term } .
 //term = factor { ( "*" | "/" | "%" ) factor } .
@@ -980,13 +1145,13 @@ void returnStatement() {
 //factor = cast [ "*" ]  ( identifier | integer | "(" expression ")" | call ) .
 
 //assignment = [ "*" ] identifier "=" expression .
-//while = "while" "(" expression ")" ( statement | "{" { statement } "}" ) .
-//if = "if" "(" expression ")" ( statement | "{" { statement } "}" ) [ "else" ( statement | "{" { statement } "}" ) ] .
+//while = "while" "(" relation_expression ")" ( statement | "{" { statement } "}" ) .
+//if = "if" "(" relation_expression ")" ( statement | "{" { statement } "}" ) [ "else" ( statement | "{" { statement } "}" ) ] .
 //call = identifier "(" [ expression { "," expression } ] ")" .
 //return = "return" [ expression ] .
 //statement = assignment ";" | while | if | call ";" | return ";" .
 
-//declaration = type identifer .
+//declaration = type identifier .
 //variable = identifier ";" .
 //procedure = identifier "(" [ variable { "," variable } ] ")" ( ";" | "{" { variable ";" } { statement } "}" ) .
 //variableORprocedure = ( "void" | type ) LOOKAHEAD -> ( ";" variable | "(" procedure) .
