@@ -1,7 +1,6 @@
-#include <stdio.h>
-#include <stdlib.h>
+#include "mipster.h"
 
-int character; // most recently read character
+int *character; // most recently read character
 int symbol; // most recently recognized symbol
 int lookahead;
 
@@ -67,14 +66,14 @@ int maxIdentifierLength;
 int lineNR;
 
 // prototypes
-static char *intstr_to_charstr(int *is);
 char *get_token_name(int sym);
 void printError(int errorcode);
 void printDebug(int errorcode);
 char *get_error_msg(int errorcode);
 
 int init_scanner() {
-	character = getchar();
+	character = mipster_malloc(sizeof(int));
+	*character = mipster_getchar();
 	maxIdentifierLength = 64;
 	lineNR = 1;
 
@@ -123,20 +122,20 @@ int getSymbol() {
 
 	if (isCharacterLetter()) {
 		// found identifier or keyword
-		identifier = malloc(maxIdentifierLength * 4);
+		identifier = mipster_malloc(maxIdentifierLength * 4);
 
 		identifierCursor = identifier;
 		identifierLength = 1;
 
 		while (isCharacterLetterOrDigitOrUnderscore()) {
 			if (identifierLength >= maxIdentifierLength)
-				exit(-1); // identifier too long
+				mipster_exit(-1); // identifier too long
 
-			*identifierCursor = character;
+			*identifierCursor = *character;
 			identifierCursor = identifierCursor + 1;
 			identifierLength = identifierLength + 1;
 
-			character = getchar();
+			*character = mipster_getchar();
 
 		}
 
@@ -152,82 +151,82 @@ int getSymbol() {
 			// caution: overflows remain undetected
 			integer = integer * 10 + character - 48;
 
-			character = getchar();
+			*character = mipster_getchar();
 		}
 
 		return INTEGER;
-	} else if (character == 59) { // ASCII code 59 = ;
-		character = getchar();
+	} else if (*character == 59) { // ASCII code 59 = ;
+		*character = mipster_getchar();
 
 		return SEMICOLON;
 
-	} else if (character == 42) { // "*" => 42
-		character = getchar();
+	} else if (*character == 42) { // "*" => 42
+		*character = mipster_getchar();
 		return ASTERISK;
 
-	} else if (character == 40) { // "(" => 40
-		character = getchar();
+	} else if (*character == 40) { // "(" => 40
+		*character = mipster_getchar();
 		return LPARENS;
 
-	} else if (character == 41) { // ")" => 41
-		character = getchar();
+	} else if (*character == 41) { // ")" => 41
+		*character = mipster_getchar();
 		return RPARENS;
 
-	} else if (character == 123) { // "{" => 123
-		character = getchar();
+	} else if (*character == 123) { // "{" => 123
+		*character = mipster_getchar();
 		return LBRACE;
 
-	} else if (character == 125) { // "}" => 125
-		character = getchar();
+	} else if (*character == 125) { // "}" => 125
+		*character = mipster_getchar();
 		return RBRACE;
 
-	} else if (character == 33) { // "!" => 61
-		character = getchar();
+	} else if (*character == 33) { // "!" => 61
+		*character = mipster_getchar();
 
-		if (character == 61) { // "=" => 61
-			character = getchar();
+		if (*character == 61) { // "=" => 61
+			*character = mipster_getchar();
 			return NOTEQ;
 		} else
 			return NOT;
 			
-	} else if (character == 61) { // "=" => 61
-		character = getchar();
+	} else if (*character == 61) { // "=" => 61
+		*character = mipster_getchar();
 
-		if (character == 61) { // "=" => 61
-			character = getchar();
+		if (*character == 61) { // "=" => 61
+			*character = mipster_getchar();
 			return EQUAL;
 		} else
 			return ASSIGN;
 
-	} else if (character == 43) { // "+" => 43
-		character = getchar();
+	} else if (*character == 43) { // "+" => 43
+		*character = mipster_getchar();
 		return PLUS;
 
-	} else if (character == 45) { // "=" => 45
-		character = getchar();
+	} else if (*character == 45) { // "=" => 45
+		*character = mipster_getchar();
 		return MINUS;
 
-	} else if (character == 62) { // ">" => 62
-		character = getchar();
+	} else if (*character == 62) { // ">" => 62
+		*character = mipster_getchar();
 
-		if (character == 61) { // "=" => 61
-			character = getchar();
+		if (*character == 61) { // "=" => 61
+			*character = mipster_getchar();
 			return GTEQ;
 		} else
-			exit(-1); //return GT;
+			mipster_exit(-1); //return GT;
 
-	} else if (character == 60) { // "<" => 60
-		character = getchar();
+	} else if (*character == 60) { // "<" => 60
+		*character = mipster_getchar();
 
-		if (character == 61) { // "=" => 61
-			character = getchar();
+		if (*character == 61) { // "=" => 61
+			*character = mipster_getchar();
 			return LTEQ;
 		} else
-			exit(-1); //return LT;
+			mipster_exit(-1); //return LT;
 
 
-	} else if (character == 44) { // "," => 44
-		character = getchar();
+	} else if (*character == 44) { // "," => 44
+		*character = mipster_getchar();
 		return COMMA;
 
 	//} else if ( ... ) {
@@ -235,7 +234,7 @@ int getSymbol() {
 	///...
 
 	} else
-		exit(-1); // unknown character
+		mipster_exit(-1); // unknown character
 }
 
 // consume input until next character is found. ignores whitespace, comments
@@ -249,57 +248,57 @@ int findNextCharacter() {
 
 	while (1) {
 		if (inComment) {
-			character = getchar();
+			*character = mipster_getchar();
 
-			if (character == 10) // ASCII code 10 = linefeed
+			if (*character == 10) // ASCII code 10 = linefeed
 				inComment = 0;
-			else if (character == 13) // ASCII code 13 = carriage return
+			else if (*character == 13) // ASCII code 13 = carriage return
 				inComment = 0;
-			else if (character == -1) // end of file is represented by -1
-				return character;
+			else if (*character == -1) // end of file is represented by -1
+				return *character;
 		} else if (isCharacterWhitespace())
-			character = getchar();
-		else if (character == 35) { // ACCII code 35 = #
-			character = getchar();
+			*character = mipster_getchar();
+		else if (*character == 35) { // ACCII code 35 = #
+			*character = mipster_getchar();
 
 			inComment = 1;
-		} else if (character == 47) { // ASCII code 47 = /
-			character = getchar();
+		} else if (*character == 47) { // ASCII code 47 = /
+			*character = mipster_getchar();
 
-			if (character == 47) { // ASCII code 47 = /
-				character = getchar();
+			if (*character == 47) { // ASCII code 47 = /
+				*character = mipster_getchar();
 
 				inComment = 1;
 			} else
-				return character;
+				return *character;
 		} else
-			return character;
+			return *character;
 	}
 }
 
 int isCharacterWhitespace() {
-	if (character == 32) // ASCII code 32 = space
+	if (*character == 32) // ASCII code 32 = space
 		return 1;
-	else if (character == 9) // ASCII code 9 = tab
+	else if (*character == 9) // ASCII code 9 = tab
 		return 1;
-	else if (character == 10) { // ASCII code 10 = linefeed
+	else if (*character == 10) { // ASCII code 10 = linefeed
 		lineNR = lineNR + 1;
 		return 1;
 	}
-	else if (character == 13) // ASCII code 13 = carriage return
+	else if (*character == 13) // ASCII code 13 = carriage return
 		return 1;
 	else
 		return 0;
 }
 
 int isCharacterLetter() {
-	if (character >= 97)	  // ASCII code 97 = a
-		if (character <= 122) // ASCII code 122 = z
+	if (*character >= 97)	  // ASCII code 97 = a
+		if (*character <= 122) // ASCII code 122 = z
 			return 1;
 		else
 			return 0;
-	else if (character >= 65) // ASCII code 65 = A
-		if (character <= 90)  // ASCII code 90 = Z
+	else if (*character >= 65) // ASCII code 65 = A
+		if (*character <= 90)  // ASCII code 90 = Z
 			return 1;
 		else
 			return 0;
@@ -476,9 +475,9 @@ int identifierOrKeyword() {
 	return -1; // can't-happen to indicate unhandled case!
 }
 int isCharacterDigit() {
-	if (character <= 47)	  // ASCII code 47 = /
+	if (*character <= 47)	  // ASCII code 47 = /
 		return 0;
-	if (character >= 58)	  // ASCII code 58 = :
+	if (*character >= 58)	  // ASCII code 58 = :
 		return 0;
 	return 1;
 }
@@ -490,7 +489,7 @@ int isCharacterLetterOrDigit() {
 int isCharacterLetterOrDigitOrUnderscore() {
 	if(isCharacterLetter()) return 1;
 	if(isCharacterLetter()) return 1;
-	if(character == 95) return 1; // '_' = 95
+	if(*character == 95) return 1; // '_' = 95
 	return 0;
 }
 
@@ -533,18 +532,72 @@ char *get_token_name(int sym) {
 	return "unknown";
 }
 
+int putchar(int c) {
+	// this relies on integers being stored little-endian, i.e. least significant byte first
+	// somehow mipster is missing instructions that prevent assigning a char variable from an int value.
+
+	// arguments: syscall number, file handle, pointer to userspace buffer, buffer length, constant 0
+	mipster_syscall(4004, 1, (unsigned int)&c, 1, 0); // __NR_write
+
+	return c;
+}
+
+int print_int(int i) {
+	int sign;
+	int pos = 0; // index of next free position in buffer
+	int buffer[16];
+	if(i < 0) {
+		sign = -1; i *= -1;
+		putchar(45); // '-'
+	}
+
+	if(i == 0) {
+		// i = 0: special case because it wouldn't output any digits at all
+		buffer[pos] = 48; // '0'
+		pos++;
+	} else {
+		// i > 0: guaranteed to have at least one loop iteration
+		while(i != 0) {
+			buffer[pos] = 48 + (i % 10);
+			pos++;
+			i /= 10;
+		}
+	}
+
+	while(pos > 0) {
+		pos--;
+		putchar(buffer[pos]);
+	}
+
+	return 0;
+}
+
 void printError(int errorcode) {
 	char *msg;
 	msg = get_error_msg(errorcode);
-	
-	printf("Syntax error at: %d %s \n", lineNR, msg);
+	char *error = "Error at line: ";
+	mipster_syscall(4004, 1, (unsigned int)error, 100, 0);
+	print_int(integer);
+	mipster_syscall(4004, 1, (unsigned int)" ", 1, 0);
+	mipster_syscall(4004, 1, (unsigned int)msg, 100, 0);
+	mipster_syscall(4004, 1, (unsigned int)"\n", 1, 0);
+	//printf("Syntax error at: %d %s \n", lineNR, msg);
 }
 
 void printDebug(int errorcode) {
 	char *msg;
 	msg = get_error_msg(errorcode);
 	
-	printf("D: %s, SYM: %s, Lahead: %s, LINENR: %d \n",msg, get_token_name(symbol), get_token_name(lookahead), lineNR);
+	mipster_syscall(4004, 1, (unsigned int)"D: ", 100, 0);
+	mipster_syscall(4004, 1, (unsigned int)msg, 100, 0);
+	mipster_syscall(4004, 1, (unsigned int)" SYM: ", 100, 0);
+	mipster_syscall(4004, 1, (unsigned int)get_token_name(symbol), 100, 0);
+	mipster_syscall(4004, 1, (unsigned int)" Lahead: ", 100, 0);
+	mipster_syscall(4004, 1, (unsigned int)get_token_name(lookahead), 100, 0);
+	mipster_syscall(4004, 1, (unsigned int)" LINENR: ", 100, 0);
+	print_int(lineNR);
+	mipster_syscall(4004, 1, (unsigned int)"\n", 1, 0);
+	//printf("D: %s, SYM: %s, Lahead: %s, LINENR: %d \n",msg, get_token_name(symbol), get_token_name(lookahead), lineNR);
 }
 
 char *get_error_msg(int errorcode) {
@@ -565,16 +618,6 @@ char *get_error_msg(int errorcode) {
 	if (errorcode == E_RETURN) 			return "return";
 	if (errorcode == E_ELSE) 			return "else";
 	if (errorcode == E_VARIABLEORPOCEDURE) 	return "variableORprocedure";	
-	if (errorcode == E_CAST) 			return "cast";	
 	
 	return "unknown";
-}
-
-static char *intstr_to_charstr(int *is) {
-	int length = 0;
-	char *cs = malloc(maxIdentifierLength);
-
-	while((cs[length] = is[length]) != 0) length++;
-
-	return cs;
 }
