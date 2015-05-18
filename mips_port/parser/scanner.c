@@ -27,9 +27,9 @@ int EQUAL;
 int PLUS;
 int MINUS;
 int ASSIGN;
-//int GT;
+int GT;
 int GTEQ;
-//int LT;
+int LT;
 int LTEQ;
 int COMMA;
 int NOT;
@@ -100,9 +100,9 @@ int init_scanner() {
 	PLUS			= 108;
 	MINUS		= 109;
 	ASSIGN		= 110;
-//	GT			= 111;
+	GT			= 111;
 	GTEQ			= 112; // greater than or equal
-//	LT			= 113;
+	LT			= 113;
 	LTEQ			= 114; // less than or equal
 	COMMA		= 115;
      NOT			= 116;
@@ -213,7 +213,7 @@ int getSymbol() {
 			*character = mipster_getchar();
 			return GTEQ;
 		} else
-			mipster_exit(-1); //return GT;
+			return GT;
 
 	} else if (*character == 60) { // "<" => 60
 		*character = mipster_getchar();
@@ -222,7 +222,7 @@ int getSymbol() {
 			*character = mipster_getchar();
 			return LTEQ;
 		} else
-			mipster_exit(-1); //return LT;
+			return LT;
 
 
 	} else if (*character == 44) { // "," => 44
@@ -520,9 +520,9 @@ char *get_token_name(int sym) {
 	if(sym == PLUS)			return "PLUS";
 	if(sym == MINUS)		return "MINUS";
 	if(sym == ASSIGN)		return "ASSIGN";
-//	if(sym == GT)			return "GT";
+	if(sym == GT)			return "GT";
 	if(sym == GTEQ)			return "GTEQ";
-//	if(sym == LT)			return "LT";
+	if(sym == LT)			return "LT";
 	if(sym == LTEQ)			return "LTEQ";
 	if(sym == COMMA)		return "COMMA";
 //	if(sym == )	return "";

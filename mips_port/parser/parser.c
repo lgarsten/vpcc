@@ -195,7 +195,7 @@ int main() {
     // write code to standard output
     //writeBinary();
 
-    return 0;
+    mipster_exit(0);
 }
 //-----------------------------
 
@@ -420,6 +420,14 @@ int relation_expression() {
 		expression();
 	}
 	else if (symbol == LTEQ) {
+		getCurrentSymbol();
+		expression();
+	}
+	else if (symbol == LT) {
+		getCurrentSymbol();
+		expression();
+	}
+	else if (symbol == GT) {
 		getCurrentSymbol();
 		expression();
 	}
