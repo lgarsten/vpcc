@@ -1,0 +1,30 @@
+000000 01001 01010 01000 00000 100000
+
+000000 01001 01010 01000 00000 100000
+
+000000 01000 01001 01010 00000 100000
+
+lw $s5, -20($s6)
+
+mips nachsehen wie befehl gereiht ist
+also 
+
+lw = 100011 = 35
+$s6 = register 22
+$s5 = register 21
+offset = -20 = 16bit = 65535 -20 +1 (2er komplement) 
+
+
+add $t0, $t1, $t2
+
+wieder nachsehen:
+$d,$s,$t
+000000ss sssttttt ddddd--- --100000
+
+000000 
+$t1 = register 9 = 5bit = 01001
+$t2 = register 10 = 5bit = 01010
+$t0 = register 8 = 5bit = 01000
+00000
+add = 100000
+
