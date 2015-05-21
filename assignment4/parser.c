@@ -17,6 +17,7 @@ void whileStatement();
 void ifStatement();
 void returnStatement();
 void fixup(int codeAddress);
+void setParameterCInCode(int codeAdress, int value);
 void call();
 int setProcedureAddress();
 void procedure(int have_asterisk);
@@ -61,13 +62,21 @@ int SW;
 
 int HLT;
 
+int SLT;	// rd ← (rs < rt) 1 true, 0 false
+int BEQ;	// branch on equal
+int BGEZ; // branch on greater or equal to zero
+int BGTZ;	 // greater zero
+int BLEZ;  // less or equal zero
+int BLTZ;  // less zero
+int BNE;	  // not equal
 int BSR;
-int BR;
+int BR;	// same as BEQ, but without parameter
 int RET;
 
 int PSH;
 int POP;
 
+int NOP;
 int BREAK;
 //...
 
@@ -85,6 +94,17 @@ int symbol;
 
 // lookahead of one
 int lookahead;
+
+void printCodeArray() {
+	int *codecursor = code;
+	int i = 0;
+	
+	while (i < codeLength) {
+		printf("%d CODEARRAY: %d\n",i, *codecursor);
+		codecursor = codecursor +1;
+		i = i +1;
+	}
+}
 
 // ERROR 
 void syntaxError(int errorcode) {
@@ -133,6 +153,8 @@ void emitCode(int op, int a, int b, int c) {
 	codecursor = codecursor + codeLength;
 
 	instruction = encodeInstruction(op, a, b, c);
+	
+	//printf("CODE WORD: %d %d %d %d \n", op, a, b, c);
 	
 	*codecursor = instruction;
 	codeLength = codeLength + 1;
@@ -205,6 +227,42 @@ int encodeInstruction(int op, int a, int b, int c) {
 		unsigned_instuction = (op - m_pow(5)) * m_pow(26) + b * m_pow(21) + a * m_pow(16) + c;
 		encoded_instruction = sign_bit + unsigned_instuction;
 	}
+	else if (op == SLT) {
+		c = twos(c, 16);		
+		encoded_instruction = 0 * m_pow(26) + b * m_pow(21) + c * m_pow(16) + a * m_pow(11) + 0 * m_pow(6) + op;
+	}
+	else if (op == BR) {
+		op = 4;
+		c = twos(c, 16);		
+		encoded_instruction = op * m_pow(26) + 0 * m_pow(21) + 0 * m_pow(16) + c;
+	}
+	else if (op == BEQ) {
+		c = twos(c, 16);
+		encoded_instruction = (op * m_pow(26)) + (a * m_pow(21)) + (b * m_pow(16)) + c;
+	}
+	else if (op == BGEZ) {
+		c = twos(c, 16);
+		encoded_instruction = (1 * m_pow(26)) + (a * m_pow(21)) + (op * m_pow(16)) + c;
+	}
+	else if (op == BGTZ) {
+		c = twos(c, 16);
+		encoded_instruction = (op * m_pow(26)) + (a * m_pow(21)) + (0 * m_pow(16)) + c;
+	}
+	else if (op == BLTZ) {		// not working, dont know why
+		c = twos(c, 16);
+		encoded_instruction = (1 * m_pow(26)) + (a * m_pow(21)) + (op * m_pow(16)) + c;
+	}
+	else if (op == BLEZ) {
+		c = twos(c, 16);
+		encoded_instruction = (op * m_pow(26)) + (a * m_pow(21)) + (0 * m_pow(16)) + c;
+	}
+	else if (op == BNE) {
+		c = twos(c, 16);
+		encoded_instruction = (op * m_pow(26)) + (a * m_pow(21)) + (b * m_pow(16)) + c;
+	}
+	else if (op == NOP) {
+		encoded_instruction = 0;
+	}
 	else if (op == BREAK) {
 		encoded_instruction = op;
 	}
@@ -267,6 +325,15 @@ int main() {
     SW = 43;
     ADDI = 8;
     LDW = 35;
+    SLT = 42;
+    BGEZ = 1;
+    BGTZ = 7;
+    BLEZ = 6;
+    BLTZ = 0;
+    BNE = 5;
+    BEQ = 4;
+    BR = 99;	// own opcode for mapping
+    NOP = 98;	// same
     BREAK = 13;
     //...
 
@@ -313,8 +380,12 @@ int main() {
     cstar();
 
     // stop code execution
-    emitCode(BREAK, 0, 0, 0);
-
+   	
+     emitCode(BREAK, 0, 0, 0);
+     
+     printf("CODE Length %d\n", codeLength);
+	printCodeArray();
+	
     // write code to standard output
     // writeBinary();
   
@@ -331,7 +402,7 @@ int main() {
     args.arguments_size = 12;
 	  
     mipster_create_process(args);
-
+	 
     return 0;
 }
 //-----------------------------
@@ -575,34 +646,48 @@ void assignment() {
 int relation_expression() {
 	debug(E_RELATION_EXPRESSION);
 	
+	int cmp_symbol = 0;
+	
 	expression();
-
+	
 	if (symbol == EQUAL) {
+		cmp_symbol = BNE;
 		getCurrentSymbol();
 		expression();
 	}
 	else if (symbol == NOTEQ) {
+		cmp_symbol = BEQ;
 		getCurrentSymbol();
 		expression();
 	}
 	else if (symbol == GT) {
+		cmp_symbol = BGEZ;
 		getCurrentSymbol();
 		expression();
 	}
 	else if (symbol == GTEQ) {
+		cmp_symbol = BGTZ;
 		getCurrentSymbol();
 		expression();
 	}
-	else if (symbol == LT) {
+	else if (symbol == LT) { 
+		cmp_symbol = BLEZ;
 		getCurrentSymbol();
 		expression();
 	}
-	else if (symbol == LTEQ) {
+	else if (symbol == LTEQ) { 
+		cmp_symbol = BLTZ;
 		getCurrentSymbol();
 		expression();
+	}
+	else {	// no comparison
+		cmp_symbol = BR;
 	}
 	
-	return 0;
+	emitCode(SLT, allocatedRegisters - 1, allocatedRegisters - 1, allocatedRegisters);	
+	allocatedRegisters = allocatedRegisters - 1;
+	
+	return cmp_symbol;
 }
 
 int expression() {
@@ -820,7 +905,7 @@ void whileStatement() {
     int branchInstruction;
 
     // remember address of next instruction to loop back to below
-    branchBackwardsToWhile = codeLength;
+    branchBackwardsToWhile = codeLength -1;
 
     if (symbol == WHILE) {
         getCurrentSymbol();
@@ -837,7 +922,7 @@ void whileStatement() {
         getCurrentSymbol();
         
         //branchInstruction = expression(); // EDIT
-	    branchInstruction = relation_expression();	
+	   branchInstruction = relation_expression();	
 		
         // remember address of next instruction which
         // conditionally branches forward to end of while
@@ -847,10 +932,13 @@ void whileStatement() {
         // assert: allocatedRegisters == 1
 
         // target address unknown, so just say 0 here, fixup is done below
-        //emit(branchInstruction, allocatedRegisters, 0, 0);
+ 	   
+        emitCode(branchInstruction, allocatedRegisters, 0, 0);
+        emitCode(NOP,0,0,0);
+
 
         // do not need the register for comparison anymore
-        allocatedRegisters = allocatedRegisters - 1;
+        allocatedRegisters = allocatedRegisters - 1;		// -1 correction, dont know why TODO
 
         if (symbol == RPARENS) {
             getCurrentSymbol();
@@ -879,11 +967,16 @@ void whileStatement() {
     // assert: allocatedRegisters == 0
 
     // unconditional branch backwards to while
-    //emit(BR, 0, 0, branchBackwardsToWhile - codeLength);
+    emitCode(BR, 0, 0, branchBackwardsToWhile - codeLength);
+    emitCode(NOP,0,0,0);
 
     // here will be the first instruction after the loop
     // so point the conditional branch instruction from above here
+   
     fixup(branchForwardToEndOfWhile);
+    
+    emitCode(NOP,0,0,0);			// dont know why TODO
+    emitCode(NOP,0,0,0);
 }
 
 void ifStatement() {
@@ -943,10 +1036,17 @@ void ifStatement() {
 }
 
 void fixup(int codeAddress) {
-    // assert: -2^15 <= codeLength - codeAddress <= 2^15 - 1
+	// assert: -2^15 <= codeLength - codeAddress <= 2^15 - 1
 
-    // branch from instruction at codeAddress to instruction at codeLength
-   // setParameterCInCode(codeAddress, codeLength - codeAddress);
+	// branch from instruction at codeAddress to instruction at codeLength
+	setParameterCInCode(codeAddress, codeLength - codeAddress);
+}
+
+void setParameterCInCode(int codeAdress, int value) {
+	int *codecursor;
+	
+	codecursor = code + codeAdress;
+	*codecursor = *codecursor + value;
 }
 //-----------------------------
 
@@ -1299,7 +1399,7 @@ int isSymbolAsteriskOrSlash() {
 void fixlink(int codeAddress) {
     int previousCodeAddress;
 
-    while (codeAddress != 0) {
+    while (codeAddress != 0) {	// TODO codeAdress is 0 too when theres a emitCode(NOP,0,0,0)
         //previousCodeAddress = getParameterCFromCode(codeAddress);
 
         fixup(codeAddress);
@@ -1347,7 +1447,7 @@ void returnStatement() {
 
 //type = "int" [ "*" ] .
 
-//relation_expression = expression [ ( "<=" | "==" | ">=" | "!=" ) expression ]                        
+//relation_expression = expression [ ( "<=" | "==" | ">=" | "<" | ">"  | "!=" ) expression ]                        
 //expression = simpleExpression [ ( "==" | "!=" | "<" | ">" | "<=" | ">=" ) simpleExpression ] .
 //simpleExpression = [ "-" ] term { ( "+" | "-" ) term } .
 //term = factor { ( "*" | "/" | "%" ) factor } .
