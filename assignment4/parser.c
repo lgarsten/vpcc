@@ -26,6 +26,7 @@ void fixlink(int codeAddress);
 void statement();
 void assignment();
 
+void printCodeArray();
 void syntaxError(int error_code);
 int isSymbolPlusOrMinus();
 int isSymbolAsteriskOrSlash();
@@ -76,7 +77,7 @@ int RET;
 int PSH;
 int POP;
 
-int NOP;
+int NOP;	 // addi zr zr 0
 int BREAK;
 //...
 
@@ -260,8 +261,8 @@ int encodeInstruction(int op, int a, int b, int c) {
 		c = twos(c, 16);
 		encoded_instruction = (op * m_pow(26)) + (a * m_pow(21)) + (b * m_pow(16)) + c;
 	}
-	else if (op == NOP) {
-		encoded_instruction = 0;
+	else if (op == NOP) {		// NOP => ADDI reg[0] reg[0] reg[0]
+		encoded_instruction = (ADDI * m_pow(26)) + ZR + ZR + ZR;
 	}
 	else if (op == BREAK) {
 		encoded_instruction = op;
@@ -271,6 +272,10 @@ int encodeInstruction(int op, int a, int b, int c) {
 	}
 
 	return encoded_instruction;
+}
+
+void setGlobalPointer() {
+	// TODO
 }
 
 void emitExit() {
@@ -373,7 +378,7 @@ int main() {
     // get first symbol from scanner
     getCurrentSymbol();
      
-    // set GP
+    // set GP	TODO count globals and set globalpointer to codeLength + globals
     emitCode(ADDI, GP, ZR, 26928);
     
     // invoke compiler
@@ -758,10 +763,10 @@ void term() {
 
         term();
 
-       // if (operatorSymbol == ASTERISK)
-         //   emitCode(MUL, allocatedRegisters - 1, allocatedRegisters - 1, allocatedRegisters);
-       // else
-         //   emitCode(DIV, allocatedRegisters - 1, allocatedRegisters - 1, allocatedRegisters);
+        if (operatorSymbol == ASTERISK)
+            emitCode(MUL, allocatedRegisters - 1, allocatedRegisters - 1, allocatedRegisters);
+        //else
+        //   emitCode(DIV, allocatedRegisters - 1, allocatedRegisters - 1, allocatedRegisters);
 
         allocatedRegisters = allocatedRegisters - 1;
     }
@@ -921,7 +926,6 @@ void whileStatement() {
         // hint 2: if there is no comparison use BEQ
         getCurrentSymbol();
         
-        //branchInstruction = expression(); // EDIT
 	   branchInstruction = relation_expression();	
 		
         // remember address of next instruction which
@@ -938,7 +942,7 @@ void whileStatement() {
 
 
         // do not need the register for comparison anymore
-        allocatedRegisters = allocatedRegisters - 1;		// -1 correction, dont know why TODO
+        allocatedRegisters = allocatedRegisters - 1;	
 
         if (symbol == RPARENS) {
             getCurrentSymbol();
@@ -974,13 +978,15 @@ void whileStatement() {
     // so point the conditional branch instruction from above here
    
     fixup(branchForwardToEndOfWhile);
-    
-    emitCode(NOP,0,0,0);			// dont know why TODO
-    emitCode(NOP,0,0,0);
 }
 
 void ifStatement() {
 	debug(E_IF);
+
+    int branchForwardToElse;
+    int branchForwardToEndOfIf;
+    
+    int branchInstruction;
 
     if (symbol == IF) {
         getCurrentSymbol();
@@ -992,7 +998,7 @@ void ifStatement() {
     if (symbol == LPARENS) {
         getCurrentSymbol();
         
-	   relation_expression();	
+	   branchInstruction = relation_expression();	
 
         if (symbol == RPARENS) {
             getCurrentSymbol();
@@ -1046,7 +1052,7 @@ void setParameterCInCode(int codeAdress, int value) {
 	int *codecursor;
 	
 	codecursor = code + codeAdress;
-	*codecursor = *codecursor + value;
+	*codecursor = *codecursor + value -1;
 }
 //-----------------------------
 
@@ -1399,7 +1405,7 @@ int isSymbolAsteriskOrSlash() {
 void fixlink(int codeAddress) {
     int previousCodeAddress;
 
-    while (codeAddress != 0) {	// TODO codeAdress is 0 too when theres a emitCode(NOP,0,0,0)
+    while (codeAddress != 0) {
         //previousCodeAddress = getParameterCFromCode(codeAddress);
 
         fixup(codeAddress);
