@@ -650,15 +650,17 @@ void assignment() {
 
 int relation_expression() {
 	debug(E_RELATION_EXPRESSION);
-	
-	int cmp_symbol = 0;
-	
+
+	// flag if there is no comparison sign
+	int no_comparison = 0;	
+	int cmp_symbol = 0;	
+		
 	expression();
-	
+
 	if (symbol == EQUAL) {
 		cmp_symbol = BNE;
 		getCurrentSymbol();
-		expression();
+		expression();	
 	}
 	else if (symbol == NOTEQ) {
 		cmp_symbol = BEQ;
@@ -666,31 +668,34 @@ int relation_expression() {
 		expression();
 	}
 	else if (symbol == GT) {
-		cmp_symbol = BGEZ;
-		getCurrentSymbol();
-		expression();
-	}
-	else if (symbol == GTEQ) {
-		cmp_symbol = BGTZ;
-		getCurrentSymbol();
-		expression();
-	}
-	else if (symbol == LT) { 
 		cmp_symbol = BLEZ;
 		getCurrentSymbol();
 		expression();
 	}
-	else if (symbol == LTEQ) { 
+	else if (symbol == GTEQ) {
 		cmp_symbol = BLTZ;
 		getCurrentSymbol();
 		expression();
 	}
-	else {	// no comparison
-		cmp_symbol = BR;
+	else if (symbol == LT) { 
+		cmp_symbol = BGEZ;
+		getCurrentSymbol();
+		expression();
+	}
+	else if (symbol == LTEQ) { 
+		cmp_symbol = BGTZ;
+		getCurrentSymbol();
+		expression();
+	}
+	else {	// no comparison: 0 == false, else true
+		no_comparison = 1;
+		cmp_symbol = BEQ;
 	}
 	
-	emitCode(SLT, allocatedRegisters - 1, allocatedRegisters - 1, allocatedRegisters);	
-	allocatedRegisters = allocatedRegisters - 1;
+	if (no_comparison != 1) {
+		emitCode(SUB, allocatedRegisters - 1, allocatedRegisters - 1, allocatedRegisters);
+		allocatedRegisters = allocatedRegisters - 1;
+	}
 	
 	return cmp_symbol;
 }
@@ -985,6 +990,7 @@ void ifStatement() {
 
     int branchForwardToElse;
     int branchForwardToEndOfIf;
+    int branchForwardToEndOfIfInElse;
     
     int branchInstruction;
 
@@ -998,7 +1004,16 @@ void ifStatement() {
     if (symbol == LPARENS) {
         getCurrentSymbol();
         
-	   branchInstruction = relation_expression();	
+	   branchInstruction = relation_expression();
+	   	
+	   // jump address to else or endif
+	   branchForwardToElse = codeLength;
+	   
+	   // branch to endif or if there is a else to else body. 
+	   emitCode(branchInstruction, allocatedRegisters, 0, 0);
+	   emitCode(NOP,0, 0, 0);
+	   
+	   allocatedRegisters = allocatedRegisters - 1;
 
         if (symbol == RPARENS) {
             getCurrentSymbol();
@@ -1021,9 +1036,27 @@ void ifStatement() {
     } else {
         statement();
     }
-
+    
+    // jump address to endif
+    branchForwardToEndOfIf = codeLength; 
+    
+    // branch to endif after if body
+    emitCode(BR, 0, 0, 0);
+    emitCode(NOP,0, 0, 0);
+    
     if (symbol == ELSE) {
     	   debug(E_ELSE);
+    	   
+    	   // branch address to endif in else
+    	   branchForwardToEndOfIfInElse = codeLength; 
+    	   
+    	   // branch to endif in else
+    	   emitCode(BR, 0, 0, 0);
+    	   emitCode(NOP,0, 0, 0);
+    	   
+    	   // fixup else branch to else body if there is a else
+    	   fixup(branchForwardToElse);
+    	   
         getCurrentSymbol();
         
         if (symbol == LBRACE) {
@@ -1036,10 +1069,18 @@ void ifStatement() {
         }
         else {
            statement();
-        }
+        }  
+        // jump to endif before else body
+        fixup(branchForwardToEndOfIfInElse);       
+    } 
+    else {
+    	   // fixup else branch to endif if there is no else 
+        fixup(branchForwardToElse);
     }
-    
+    // fixup branch to endif
+    fixup(branchForwardToEndOfIf);         
 }
+
 
 void fixup(int codeAddress) {
 	// assert: -2^15 <= codeLength - codeAddress <= 2^15 - 1
