@@ -38,6 +38,7 @@ int LTEQ;
 int COMMA;
 int NOT;
 int NOTEQ;
+int SLASH;
 
 
 // error codes
@@ -75,9 +76,19 @@ void printError(int errorcode);
 void printDebug(int errorcode);
 char *get_error_msg(int errorcode);
 
+int scanner_lookahead;
+
+int scanner_getchar() {
+	int c;
+	c = scanner_lookahead;
+	scanner_lookahead = mipster_getchar();
+	return c;
+}
+
 int init_scanner() {
 	character = mipster_malloc(sizeof(int));
-	*character = mipster_getchar();
+	*character = scanner_getchar(); // fill lookahead buffer
+	*character = scanner_getchar(); // fetch first character
 	maxIdentifierLength = 64;
 	lineNR = 1;
 
@@ -111,7 +122,7 @@ int init_scanner() {
 	COMMA		= 115;
      NOT			= 116;
 	NOTEQ		= 117;
-//			= 118;
+	SLASH		= 118;
 
 	// FIXME: add new tokens here!
 }
@@ -159,7 +170,7 @@ int getSymbol2() {
 			identifierCursor = identifierCursor + 1;
 			identifierLength = identifierLength + 1;
 
-			*character = mipster_getchar();
+			*character = scanner_getchar();
 
 		}
 
@@ -175,82 +186,86 @@ int getSymbol2() {
 			// caution: overflows remain undetected
 			integer = integer * 10 + (*character) - 48;
 
-			*character = mipster_getchar();
+			*character = scanner_getchar();
 		}
 
 		return INTEGER;
 	} else if (*character == 59) { // ASCII code 59 = ;
-		*character = mipster_getchar();
+		*character = scanner_getchar();
 
 		return SEMICOLON;
 
 	} else if (*character == 42) { // "*" => 42
-		*character = mipster_getchar();
+		*character = scanner_getchar();
 		return ASTERISK;
 
+	} else if (*character == 47) { // "/" => 47
+		*character = scanner_getchar();
+		return SLASH;
+
 	} else if (*character == 40) { // "(" => 40
-		*character = mipster_getchar();
+		*character = scanner_getchar();
 		return LPARENS;
 
 	} else if (*character == 41) { // ")" => 41
-		*character = mipster_getchar();
+		*character = scanner_getchar();
 		return RPARENS;
 
 	} else if (*character == 123) { // "{" => 123
-		*character = mipster_getchar();
+		*character = scanner_getchar();
 		return LBRACE;
 
 	} else if (*character == 125) { // "}" => 125
-		*character = mipster_getchar();
+		*character = scanner_getchar();
 		return RBRACE;
 
 	} else if (*character == 33) { // "!" => 61
-		*character = mipster_getchar();
+		*character = scanner_getchar();
 
 		if (*character == 61) { // "=" => 61
-			*character = mipster_getchar();
+			*character = scanner_getchar();
 			return NOTEQ;
 		} else
 			return NOT;
 			
 	} else if (*character == 61) { // "=" => 61
-		*character = mipster_getchar();
+		*character = scanner_getchar();
 
 		if (*character == 61) { // "=" => 61
-			*character = mipster_getchar();
+			*character = scanner_getchar();
 			return EQUAL;
 		} else
 			return ASSIGN;
 
 	} else if (*character == 43) { // "+" => 43
-		*character = mipster_getchar();
+		*character = scanner_getchar();
 		return PLUS;
 
 	} else if (*character == 45) { // "=" => 45
-		*character = mipster_getchar();
+		*character = scanner_getchar();
 		return MINUS;
 
 	} else if (*character == 62) { // ">" => 62
-		*character = mipster_getchar();
+		*character = scanner_getchar();
 
 		if (*character == 61) { // "=" => 61
-			*character = mipster_getchar();
+			*character = scanner_getchar();
 			return GTEQ;
 		} else
 			return GT;
 
 	} else if (*character == 60) { // "<" => 60
-		*character = mipster_getchar();
+		*character = scanner_getchar();
 
 		if (*character == 61) { // "=" => 61
-			*character = mipster_getchar();
+			*character = scanner_getchar();
 			return LTEQ;
 		} else
 			return LT;
 
 
 	} else if (*character == 44) { // "," => 44
-		*character = mipster_getchar();
+		*character = scanner_getchar();
 		return COMMA;
 
 	//} else if ( ... ) {
@@ -274,7 +289,7 @@ int findNextCharacter() {
 
 	while (1) {
 		if (inComment) {
-			*character = mipster_getchar();
+			*character = scanner_getchar();
 
 			if (*character == 10) // ASCII code 10 = linefeed
 				inComment = 0;
@@ -283,17 +298,16 @@ int findNextCharacter() {
 			else if (*character == -1) // end of file is represented by -1
 				return *character;
 		} else if (isCharacterWhitespace())
-			*character = mipster_getchar();
+			*character = scanner_getchar();
 		else if (*character == 35) { // ACCII code 35 = #
-			*character = mipster_getchar();
+			*character = scanner_getchar();
 
 			inComment = 1;
 		} else if (*character == 47) { // ASCII code 47 = /
-			*character = mipster_getchar();
-
-			if (*character == 47) { // ASCII code 47 = /
-				*character = mipster_getchar();
-
+			if(scanner_lookahead == 47) { // ASCII code 47 = /
+				// current char and lookahead char are slashes: consume both and assume we are inside a comment block
+				*character = scanner_getchar();
+				*character = scanner_getchar();
 				inComment = 1;
 			} else
 				return *character;

@@ -29,6 +29,7 @@ extern int RETURN;
 // special character and operator tokens
 extern int SEMICOLON;
 extern int ASTERISK;
+extern int SLASH;
 extern int LPARENS;
 extern int RPARENS;
 extern int LBRACE;

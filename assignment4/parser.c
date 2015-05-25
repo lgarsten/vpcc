@@ -76,6 +76,8 @@ int RET;
 
 int PSH;
 int POP;
+int MFLO; // move LO value into reg
+int MFHI; // same with HI
 
 int NOP;	 // addi zr zr 0
 int BREAK;
@@ -207,7 +209,10 @@ int encodeInstruction(int op, int a, int b, int c) {
 	else if (op == MUL) {
 		encoded_instruction = (op * m_pow(26)) + (b * m_pow(21)) + (c * m_pow(16)) + (a * m_pow(11)) + (0 * m_pow(6)) + 2;
 	}
-	else if (op == ADDI) {
+	else if (op == DIV) {	// stores result in LO and HI special registers. 
+		encoded_instruction = (a * m_pow(21)) + (b * m_pow(16)) + (0 * m_pow(6)) + op;
+	}
+	else if (op == ADDI) {  // TODO support 32 bit values 
 		c = twos(c, 16);
 		encoded_instruction = (op * m_pow(26)) + (b * m_pow(21)) + (a * m_pow(16)) + c;
 	}
@@ -260,6 +265,14 @@ int encodeInstruction(int op, int a, int b, int c) {
 	else if (op == BNE) {
 		c = twos(c, 16);
 		encoded_instruction = (op * m_pow(26)) + (a * m_pow(21)) + (b * m_pow(16)) + c;
+	}
+	else if (op == MFLO) {
+		c = twos(c, 16);
+		encoded_instruction = (a * m_pow(11)) + op;
+	}
+	else if (op == MFHI) {
+		c = twos(c, 16);
+		encoded_instruction = (a * m_pow(11)) + op;
 	}
 	else if (op == NOP) {		// NOP => ADDI reg[0] reg[0] reg[0]
 		encoded_instruction = (ADDI * m_pow(26)) + ZR + ZR + ZR;
@@ -327,10 +340,13 @@ int main() {
     ADD = 32; // opcode for ADD
     SUB = 34; // opcode for SUB
     MUL = 28;
+    DIV = 26;
     SW = 43;
     ADDI = 8;
     LDW = 35;
     SLT = 42;
+    MFLO = 18;
+    MFHI = 16;
     BGEZ = 1;
     BGTZ = 7;
     BLEZ = 6;
@@ -768,10 +784,14 @@ void term() {
 
         term();
 
-        if (operatorSymbol == ASTERISK)
+        if (operatorSymbol == ASTERISK) {
             emitCode(MUL, allocatedRegisters - 1, allocatedRegisters - 1, allocatedRegisters);
-        //else
-        //   emitCode(DIV, allocatedRegisters - 1, allocatedRegisters - 1, allocatedRegisters);
+        }
+        else {
+            emitCode(DIV, allocatedRegisters - 1, allocatedRegisters , 0);	// TODO fix LO, HI
+            emitCode(MFLO,allocatedRegisters -1, 0, 0);
+            //emitCode(MFHI,allocatedRegisters -1, 0, 0);
+        }
 
         allocatedRegisters = allocatedRegisters - 1;
     }
@@ -1431,10 +1451,9 @@ int isSymbolAsteriskOrSlash() {
 	if (symbol == ASTERISK) {
 		return 1;
 	}
-	// not scanned yet!
-	//if (symbol == SLASH) {
-	//	return 1;
-	//}
+	if (symbol == SLASH) {
+		return 1;
+	}
 	return 0;
 }
 
