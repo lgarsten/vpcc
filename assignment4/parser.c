@@ -60,6 +60,8 @@ int SUBI;
 
 int LDW;
 int SW;
+int LUI;
+int ORI;
 
 int HLT;
 
@@ -192,6 +194,36 @@ int twos(int x, int bit) {
 	return x;
 }
 
+int is32bit(int x) {
+	if (x > 32767) {
+		return 1;
+	}
+	else if (x < -65535) {
+		return 1;
+	}
+	else {
+		return 0;
+	}
+}
+
+void ADDI32bitImmediate(int op, int a, int b, int c) {
+	// immediate values bigger than 16bit is done by: "lui $s0, upper(big)" and "ori $s0, $s0, lower(big)"
+	int max = 32767;
+	int min = -65535;
+	
+	if (c > max) {
+		emitCode(LUI,a,b,c);
+		emitCode(ORI,a,a,c);	
+	}
+	else if (c < min) {
+		emitCode(LUI,a,b,c);
+		emitCode(ORI,a,a,c);	
+	}
+	else {
+		emitCode(ADDI, a, b, c);
+	}
+}
+
 int encodeInstruction(int op, int a, int b, int c) {
 	
 	// 0x80000000, to fix integer overflow
@@ -204,7 +236,9 @@ int encodeInstruction(int op, int a, int b, int c) {
 		encoded_instruction = (b * m_pow(21)) + (c * m_pow(16)) + (a * m_pow(11)) + (0 * m_pow(6)) + op; 
 	}
 	else if (op == SUB) {
-		encoded_instruction = (b * m_pow(21)) + (c * m_pow(16)) + (a * m_pow(11)) + (0 * m_pow(6)) + op;
+	    	if (integer != -2147483648) {	// FIX integer overflow
+			encoded_instruction = (b * m_pow(21)) + (c * m_pow(16)) + (a * m_pow(11)) + (0 * m_pow(6)) + op;
+		}
 	}
 	else if (op == MUL) {
 		encoded_instruction = (op * m_pow(26)) + (b * m_pow(21)) + (c * m_pow(16)) + (a * m_pow(11)) + (0 * m_pow(6)) + 2;
@@ -254,7 +288,7 @@ int encodeInstruction(int op, int a, int b, int c) {
 		c = twos(c, 16);
 		encoded_instruction = (op * m_pow(26)) + (a * m_pow(21)) + (0 * m_pow(16)) + c;
 	}
-	else if (op == BLTZ) {		// not working, dont know why
+	else if (op == BLTZ) {	
 		c = twos(c, 16);
 		encoded_instruction = (1 * m_pow(26)) + (a * m_pow(21)) + (op * m_pow(16)) + c;
 	}
@@ -277,6 +311,23 @@ int encodeInstruction(int op, int a, int b, int c) {
 	else if (op == NOP) {		// NOP => ADDI reg[0] reg[0] reg[0]
 		encoded_instruction = (ADDI * m_pow(26)) + ZR + ZR + ZR;
 	}
+	else if (op == LUI) {		// LUI reg[target],unused,immediate 80×(1÷(2^4))
+		int shift = m_pow(16);   // 16 bit shift value
+		if (c == -2147483648) {		// if 0x80000000
+			encoded_instruction = (op * m_pow(26)) + (a * m_pow(16)) + 32768;
+		}
+		else {
+			c = c /shift;			//  shift c in high 32 bit
+			encoded_instruction = (op * m_pow(26)) + (a * m_pow(16)) + c;
+		}
+	}						
+	else if (op == ORI) {		// ORI reg[target],reg[high_32_bit],immediate low_16_bit
+		int shift = m_pow(16);
+		int high_bits = (c / shift) * m_pow(16);	// high 32 bit in last 4 bits
+		op = 13;								// correct opcode, else BREAK would be called
+		c = c - high_bits; 						// correct to low 16 bits	
+		encoded_instruction = (op * m_pow(26)) + (b * m_pow(21)) + (a * m_pow(16)) + c;
+	}		
 	else if (op == BREAK) {
 		encoded_instruction = op;
 	}
@@ -344,6 +395,8 @@ int main() {
     SW = 43;
     ADDI = 8;
     LDW = 35;
+    LUI = 15;
+    ORI = 97;
     SLT = 42;
     MFLO = 18;
     MFHI = 16;
@@ -400,8 +453,10 @@ int main() {
     // invoke compiler
     cstar();
 
-    // stop code execution
-   	
+//	emitCode(LUI,1,0,1048575);
+//	emitCode(ORI,1,1,1048575);
+
+     // stop code execution
      emitCode(BREAK, 0, 0, 0);
      
      printf("CODE Length %d\n", codeLength);
@@ -410,19 +465,15 @@ int main() {
     // write code to standard output
     // writeBinary();
   
-    char* name = "foo";
-    char* argstring = "--help --me";
-  
-    mipster_create_process_args_t args;
+    char* name = "a.mipster";
+     
+    mipster_dump_raw_args_t args;
     args.code_addr = (int)code;
     args.code_size = 4 * codeLength;
-    args.entry_point = 0; //offset in code array
     args.name_addr = (int)name;
-    args.name_size = 4; // foo\0
-    args.arguments_addr = (int)argstring;
-    args.arguments_size = 12;
-	  
-    mipster_create_process(args);
+    args.name_size = 10; 
+
+    mipster_dump_raw(args);  
 	 
     return 0;
 }
@@ -853,9 +904,8 @@ void factor() {
     } 
     else if (symbol == INTEGER) {
         allocatedRegisters = allocatedRegisters + 1;
-        
-        emitCode(ADDI, allocatedRegisters, ZR, integer);
-
+        //emitCode(ADDI, allocatedRegisters, ZR, integer);
+	   ADDI32bitImmediate(ADDI, allocatedRegisters, ZR, integer);
         getCurrentSymbol();
     } 
     else if (symbol == LPARENS) {
