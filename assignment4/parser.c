@@ -20,11 +20,14 @@ void fixup(int codeAddress);
 void setParameterCInCode(int codeAdress, int value);
 void call();
 int setProcedureAddress();
+int getOpcodeFromCode(int instruction);
+void prologue(loadSize);
+void epilogue(paramSize);
 void procedure(int have_asterisk);
 void variable(int have_asterisk);
 void fixlink(int codeAddress);
 void statement();
-void assignment();
+void assignment(int have_asterisk);
 
 void printCodeArray();
 void syntaxError(int error_code);
@@ -45,6 +48,9 @@ int ZR; // zero register
 
 // compile-time, stack-based register allocation
 int allocatedRegisters;
+
+// bump pointer for heap allocation
+int bump_pointer;
 
 // compile-time, bump pointer allocation of global and local variables
 int allocatedGlobalVariables;
@@ -76,6 +82,10 @@ int BSR;
 int BR;	// same as BEQ, but without parameter
 int RET;
 
+int J;
+int JAL;
+int JR;
+
 int PSH;
 int POP;
 int MFLO; // move LO value into reg
@@ -99,6 +109,9 @@ int symbol;
 
 // lookahead of one
 int lookahead;
+
+// detect pointer
+int is_pointer;
 
 void printCodeArray() {
 	int *codecursor = code;
@@ -158,9 +171,7 @@ void emitCode(int op, int a, int b, int c) {
 	codecursor = codecursor + codeLength;
 
 	instruction = encodeInstruction(op, a, b, c);
-	
-	//printf("CODE WORD: %d %d %d %d \n", op, a, b, c);
-	
+		
 	*codecursor = instruction;
 	codeLength = codeLength + 1;
 }
@@ -236,17 +247,17 @@ int encodeInstruction(int op, int a, int b, int c) {
 		encoded_instruction = (b * m_pow(21)) + (c * m_pow(16)) + (a * m_pow(11)) + (0 * m_pow(6)) + op; 
 	}
 	else if (op == SUB) {
-	    	if (integer != -2147483648) {	// FIX integer overflow
+	    	if (integer != -2147483648) {	// FIX integer overflow TODO test..
 			encoded_instruction = (b * m_pow(21)) + (c * m_pow(16)) + (a * m_pow(11)) + (0 * m_pow(6)) + op;
 		}
 	}
 	else if (op == MUL) {
 		encoded_instruction = (op * m_pow(26)) + (b * m_pow(21)) + (c * m_pow(16)) + (a * m_pow(11)) + (0 * m_pow(6)) + 2;
 	}
-	else if (op == DIV) {	// stores result in LO and HI special registers. 
+	else if (op == DIV) {	// stores result in LO and HI special registers
 		encoded_instruction = (a * m_pow(21)) + (b * m_pow(16)) + (0 * m_pow(6)) + op;
 	}
-	else if (op == ADDI) {  // TODO support 32 bit values 
+	else if (op == ADDI) { 
 		c = twos(c, 16);
 		encoded_instruction = (op * m_pow(26)) + (b * m_pow(21)) + (a * m_pow(16)) + c;
 	}
@@ -327,7 +338,19 @@ int encodeInstruction(int op, int a, int b, int c) {
 		op = 13;								// correct opcode, else BREAK would be called
 		c = c - high_bits; 						// correct to low 16 bits	
 		encoded_instruction = (op * m_pow(26)) + (b * m_pow(21)) + (a * m_pow(16)) + c;
-	}		
+	}	
+	else if (op == J) {
+		c = twos(c, 26);
+		encoded_instruction = op * m_pow(26) + c;
+	}	
+	else if (op == JAL) {
+		c = twos(c, 26);
+		encoded_instruction = op * m_pow(26) + c;
+	}
+	else if (op == JR) {
+		op = 8;
+		encoded_instruction = 0 * m_pow(26) + a * m_pow(21) + op;
+	}	
 	else if (op == BREAK) {
 		encoded_instruction = op;
 	}
@@ -338,8 +361,67 @@ int encodeInstruction(int op, int a, int b, int c) {
 	return encoded_instruction;
 }
 
+// set GP to code length + global variables + 1 (+1 = GP set instruction)
 void setGlobalPointer() {
-	// TODO
+	int save_code_length = codeLength;
+	codeLength = 0;
+	
+	emitCode(ADDI, GP, GP, (allocatedGlobalVariables + save_code_length +1) *4);
+	bump_pointer = ((allocatedGlobalVariables + save_code_length +1) * 4) +4;
+	
+	// bump pointer starts at GP + 4 and is increased by 4 for every allocated memory
+	emitCode(ADDI, 1, GP, 4);
+	emitCode(SW, 1, GP, 4);
+	
+	// set RR to zero
+	emitCode(ADDI, RR, ZR, ZR);
+	
+	codeLength = save_code_length;
+}
+
+void emitMalloc() {
+
+     int* identifierCursor;
+   
+     identifierCursor = identifier; 
+
+     *identifierCursor = 109; // ASCII code 101 = m
+     identifierCursor = identifierCursor + 1;
+     *identifierCursor = 97; // ASCII code 120 = a
+     identifierCursor = identifierCursor + 1;
+     *identifierCursor = 108; // ASCII code 105 = l
+     identifierCursor = identifierCursor + 1;
+     *identifierCursor = 108; // ASCII code 116 = l
+     identifierCursor = identifierCursor + 1;
+     *identifierCursor = 111; // ASCII code 116 = o
+     identifierCursor = identifierCursor + 1;
+     *identifierCursor = 99; // ASCII code 116 = c
+     identifierCursor = identifierCursor + 1;
+     *identifierCursor = 0; // end of identifier
+
+     createSymbolTableEntry(codeLength);
+
+	prologue(0);	// 0 local vars
+
+	// load requested mem_size from stack (arg)
+	emitCode(LDW, 2, SP, 8);
+
+	// load bump_pointer
+	emitCode(LDW, 1, GP, 4);
+	
+	// save pointer to RR
+	emitCode(ADDI, RR, 1, 4);
+	
+	// increase bump_pointer (load current)
+	emitCode(LDW, 1, GP, 4);
+	
+	// add requested mem_size bump_pointer
+	emitCode(ADD, 1, 1, 2);
+	
+	// save increased bump_pointer
+	emitCode(SW, 1, GP, 4);
+	
+	epilogue(1 * 4);	// 1 arg: mem_size
 }
 
 void emitExit() {
@@ -376,8 +458,8 @@ int main() {
     maxIdentifierLength = 42;
 
     LINK = 31;
-    SP = 30;
-    FP = 29;
+    FP = 30;
+    SP = 29;
     GP = 28;
     RR = 27;
     //...
@@ -406,6 +488,10 @@ int main() {
     BLTZ = 0;
     BNE = 5;
     BEQ = 4;
+    J = 2;
+    JAL = 3;
+    JR = 96;   // opcode is 8 but ADDI is using it
+    BSR = JAL;
     BR = 99;	// own opcode for mapping
     NOP = 98;	// same
     BREAK = 13;
@@ -420,6 +506,7 @@ int main() {
     // allocate memory for emitting code
     code = mipster_malloc(maxCodeLength * 4);
     codeLength = 0;
+    is_pointer = 0;
 
     // start executing by branching to main procedure
     // please do not forget: parameter c requires fixup
@@ -434,33 +521,43 @@ int main() {
     //emitCode(BSR, 0, 0, codeLength + 1);
 
     // emit library code for exit right here
-     emitExit();
-
+    emitExit();
+   
     // similarly, emit library code for malloc, getchar, and putchar
     //...
     
-     // init scanner
+    // init scanner
     init_scanner();
-	// init parser
+    // init parser
     initParser();
-
-    // get first symbol from scanner
-    getCurrentSymbol();
-     
-    // set GP	TODO count globals and set globalpointer to codeLength + globals
-    emitCode(ADDI, GP, ZR, 26928);
+       
+    // reserve first instruction for GP fixup and second and third for heap_pointer 4ed for RR
+    emitCode(NOP,0,0,0);   
+    emitCode(NOP,0,0,0);
+    emitCode(NOP,0,0,0);
+    emitCode(NOP,0,0,0);
     
+    // jump to end of malloc lib
+    emitCode(J, 0, 0, 25);	// 25 = 4 reserved + j + delay slot + malloc code length
+    emitCode(NOP, 0, 0, 0);
+   
+    // load malloc
+    emitMalloc();
+    
+    // get first symbol from scanner
+    getCurrentSymbol(); 
+     
     // invoke compiler
     cstar();
-
-//	emitCode(LUI,1,0,1048575);
-//	emitCode(ORI,1,1,1048575);
-
-     // stop code execution
-     emitCode(BREAK, 0, 0, 0);
+          
+    // set GP     
+    setGlobalPointer();
+	
+    // stop code execution
+    emitCode(BREAK, 0, 0, 0);
      
-     printf("CODE Length %d\n", codeLength);
-	printCodeArray();
+    printf("CODE Length %d\n", codeLength);
+    printCodeArray();
 	
     // write code to standard output
     // writeBinary();
@@ -501,6 +598,9 @@ int createSymbolTableEntry(int data) {
     // store data integer
     symbolTableCursor = symbolTable + 2;
     *symbolTableCursor = data;
+    
+    symbolTableCursor = symbolTable + 3;
+    *symbolTableCursor = is_pointer;  
 
     return data;
 }
@@ -570,6 +670,8 @@ void variableORprocedure() {
 	debug(E_VARIABLEORPOCEDURE);
 
 	have_asterisk = 0;
+	is_pointer = 0;
+	
 	if (symbol == ASTERISK) {
 		have_asterisk = 1;
 	}
@@ -601,7 +703,6 @@ void declaration() {
 	type();
 	debug(E_DECLARATION);
 	if (symbol == IDENTIFIER) {
-		//createSymbolTableEntry(0);
 		createSymbolTableEntry(allocateLocalVariable());
 		dump_symbol_table(symbolTable);
 		getCurrentSymbol();
@@ -614,8 +715,8 @@ void declaration() {
 // global var
 void variable(int have_asterisk) {
 	debug(E_VARIABLE);
+	
 	if (symbol == IDENTIFIER) {
-		//createSymbolTableEntry(0);
 		createSymbolTableEntry(allocateGlobalVariable());
 
 		dump_symbol_table(symbolTable);
@@ -636,6 +737,7 @@ int type() {
 		getCurrentSymbol();
 		
 		if (symbol == ASTERISK) {
+			is_pointer = 1;
 			getCurrentSymbol();
 		}
 		return 1;
@@ -647,6 +749,9 @@ int type() {
 
 void statement() {
 	debug(E_STATEMENT);
+	
+	int have_asterisk;
+	have_asterisk = 0;
 
 	if (symbol == WHILE) {
 		whileStatement();
@@ -659,10 +764,11 @@ void statement() {
 		getCurrentSymbol();
 	}
 	else if (symbol == ASTERISK) {
+		have_asterisk = 1;
 		getCurrentSymbol();
 		if (symbol == IDENTIFIER) {
 			if (lookahead == ASSIGN) {
-				assignment();
+				assignment(have_asterisk);
 				getCurrentSymbol();
 			}
 			else {
@@ -673,7 +779,7 @@ void statement() {
 	}
 	else if (symbol == IDENTIFIER) {
 		if (lookahead == ASSIGN) {
-			assignment();
+			assignment(have_asterisk);
 			getCurrentSymbol();
 		}
 		else {
@@ -691,21 +797,32 @@ void statement() {
 	}
 }
 
-void assignment() {
+void assignment(int have_asterisk) {
 	debug(E_ASSIGNMENT);
-	if (symbol == ASTERISK) {
-		getCurrentSymbol();
-	}
+		
 	if (symbol == IDENTIFIER) {
-	
+
 		int *tmp = getSymbolTableEntry();
 				
 		getCurrentSymbol();
 		if (symbol == ASSIGN) {
 			getCurrentSymbol();
+			
 			expression();
 			
-			emitCode(SW, allocatedRegisters, GP, tmp[2]);
+			// is pointer
+			if (tmp[3] == 1) {
+				if (have_asterisk == 1) {	// dereference
+					emitCode(LDW, allocatedRegisters +1, GP, tmp[2]);
+					emitCode(SW, allocatedRegisters, allocatedRegisters +1, 0);
+				}
+				else {					// ref
+					emitCode(SW, allocatedRegisters, GP, tmp[2]);
+				}
+			}
+			else {
+				emitCode(SW, allocatedRegisters, GP, tmp[2]);
+			}
 			
 			allocatedRegisters = allocatedRegisters -1;
 		}
@@ -904,7 +1021,6 @@ void factor() {
     } 
     else if (symbol == INTEGER) {
         allocatedRegisters = allocatedRegisters + 1;
-        //emitCode(ADDI, allocatedRegisters, ZR, integer);
 	   ADDI32bitImmediate(ADDI, allocatedRegisters, ZR, integer);
         getCurrentSymbol();
     } 
@@ -923,8 +1039,8 @@ void factor() {
         syntaxError(E_FACTOR); // identifier, integer, or left parenthesis expected!
     }
 
-    //if (dereference)
-        //emitCode(LDW, allocatedRegisters, allocatedRegisters, 0);
+    if (dereference)
+        emitCode(LDW, allocatedRegisters, allocatedRegisters, 0);
 
     // assert: allocatedRegisters == n + 1
 }
@@ -1184,7 +1300,9 @@ void call() {
     // both must be local variables to work for nested expressions
     int* procedureIdentifier;
     int savedAllocatedRegisters;
-	int procedureAddress;
+    int procedureAddress;
+
+    int *restoreIdentifier;
 
     if (symbol == IDENTIFIER) {
         // save procedure identifier for symbol table lookup below
@@ -1195,11 +1313,13 @@ void call() {
         savedAllocatedRegisters = allocatedRegisters;
 
         // save allocated registers on stack
-      //  while (allocatedRegisters > 0) {
-      //      emit(PSH, allocatedRegisters, SP, 4);
-
-      //      allocatedRegisters = allocatedRegisters - 1;
-      //  }
+        while (allocatedRegisters > 0) {
+            //emit(PSH, allocatedRegisters, SP, 4);
+		  emitCode(ADDI, SP, SP, -4);
+	       emitCode(SW, allocatedRegisters, SP, 0);
+	       
+            allocatedRegisters = allocatedRegisters - 1;
+        }
 
         // assert: allocatedRegisters == 0
 
@@ -1211,7 +1331,9 @@ void call() {
 
                 // push value of expression (actual parameter) onto stack
                 //emit(PSH, allocatedRegisters, SP, 4);
-
+		  	 emitCode(ADDI, SP, SP, -4);
+	      	 emitCode(SW, allocatedRegisters, SP, 0);
+	      	 
                 // register for value of expression is not needed anymore
                 allocatedRegisters = allocatedRegisters - 1;
 
@@ -1223,7 +1345,9 @@ void call() {
 
                     // push value of expression (actual parameter) onto stack
                     //emit(PSH, allocatedRegisters, SP, 4);
-
+		  	 	emitCode(ADDI, SP, SP, -4);
+	      	 	emitCode(SW, allocatedRegisters, SP, 0);
+	      	 
                     // register for value of expression is not needed anymore
                     allocatedRegisters = allocatedRegisters - 1;
 
@@ -1243,33 +1367,50 @@ void call() {
             syntaxError(E_CALL); // left parenthesis expected!
         }
 
+	   // save current identifier
+	   restoreIdentifier = identifier;
         // restore procedure identifier for symbol table lookup
         identifier = procedureIdentifier;
 
         procedureAddress = setProcedureAddress();
-
-       // if (procedureAddress == codeLength)
+	
+	  // function call but declaration is missing 
+        if (procedureAddress == codeLength) {
             // create a new fixup chain
             //emit(BSR, 0, 0, 0);
-       // else if (getOpcodeFromCode(procedureAddress) == BSR)
+            emitCode(JAL, 0, 0, 0);
+        } 
+        else if (getOpcodeFromCode(procedureAddress) == BSR) {
             // link to the head of an existing fixup chain
             //emit(BSR, 0, 0, procedureAddress);
-       // else
+        }
+        else {
             // branch to subroutine to invoke procedure
             //emit(BSR, 0, 0, procedureAddress - codeLength);
+            emitCode(JAL, 0, 0, procedureAddress);
+            emitCode(NOP, 0, 0, 0);
+            // TODO mb use BR and set LINK instead of JAL to use a relative branch instead of a jump instruction
+        }
 		
         // assert: allocatedRegisters == 0
-
         // restore allocated registers from stack
-      //  while (allocatedRegisters < savedAllocatedRegisters) {
-      //      allocatedRegisters = allocatedRegisters + 1;
-
-      //      emit(POP, allocatedRegisters, SP, 4);
-      //  }
+      	while (allocatedRegisters < savedAllocatedRegisters) {
+          	allocatedRegisters = allocatedRegisters + 1;
+			
+      	     //emit(POP, allocatedRegisters, SP, 4);
+      	     emitCode(LDW, allocatedRegisters, SP, 0);
+			emitCode(ADDI, SP, SP, 4);
+          }
+          
+          // save return value into current register
+          allocatedRegisters = allocatedRegisters +1;
+          emitCode(ADD, allocatedRegisters, ZR, RR);
+          
     } else {
         syntaxError(E_CALL); // identifier expected!
     }
-    // assert: allocatedRegisters == n
+    // ? assert: allocatedRegisters == n ?
+    identifier = restoreIdentifier;
 }
 //-----------------------------
 
@@ -1279,34 +1420,50 @@ int setProcedureAddress() {
 	int* symbolTableCursor;
 	int savedAddress;
 
-printf("[PARSER] looking up procedure '%ls'\n", identifier);
+	printf("[PARSER] looking up procedure '%ls'\n", identifier);
 
 	// try to look up current identifier
 	symbolTableCursor = getSymbolTableEntry();
 
 	if (symbolTableCursor != 0) {
 		// found a symbol table entry - do weird shit with it.
-printf("\t -> found at %d\n", symbolTableCursor);
+		printf("\t -> found at %d\n", symbolTableCursor);
 		symbolTableCursor = symbolTableCursor + 2;
 
 		savedAddress = *symbolTableCursor;
 
-//		if (getOpcodeFromCode(savedAddress) == BSR) {
+		if (getOpcodeFromCode(savedAddress) == BSR) {
 			// save address of next instruction which may point to
 			// the new head of an existing fixup chain
 			// or the beginning of a procedure body
-//			*symbolTableCursor = codeLength;
-//		}
+			*symbolTableCursor = codeLength;
+		}
 
 		return savedAddress;
 	} else {
-printf("\t -> not found");
-printf("\n");
+		printf("\t -> not found");
+		printf("\n");
 		// procedure not found but who cares,
 		// just create entry in symbol table,
 		// and save address of next instruction
 		return createSymbolTableEntry(codeLength);
 	}
+}
+
+int getOpcodeFromCode(int address) {
+	int shift;
+	int opcode;
+	int *codecursor;
+	
+	codecursor = code;
+	codecursor = codecursor + address;
+		
+	opcode = *codecursor;
+	// check last 5 bits of the instruction for JAL
+	shift = m_pow(26);
+	opcode = opcode / shift;
+	
+	return opcode;
 }
 
 //-----------------------------
@@ -1428,6 +1585,7 @@ void procedure(int have_asterisk) {
             }
 
             // procedure prologue
+		 // prologue(localVariables * 4);
 
             // save return address
             //emit(PSH, LINK, SP, 4);
@@ -1444,14 +1602,18 @@ void procedure(int have_asterisk) {
             // create a fixup chain for return statements
             returnBranches = 0;
 
-	printf("\n[PARSER] ===== begin procedure statement block =====\n\n");
+		  printf("\n[PARSER] ===== begin procedure statement block =====\n\n");
+		  
             while (symbol != RBRACE) {
             	statement();
             }
-	printf("\n[PARSER] ===== end procedure statement block =====\n\n");
+            
+		  printf("\n[PARSER] ===== end procedure statement block =====\n\n");
+		  
             getCurrentSymbol();
 
             // procedure epilogue
+		 // epilogue(parameters * 4);
 
             //fixlink(returnBranches);
 
@@ -1485,6 +1647,35 @@ void procedure(int have_asterisk) {
 	printf("[PARSER] end of procedure\n");
 
     // assert: allocatedRegisters == 0
+}
+
+void prologue(int loadSize) {
+	// push SP
+	emitCode(ADDI, SP, SP, -4);
+	emitCode(SW, LINK, SP, 0);
+	// push FP
+	emitCode(ADDI, SP, SP, -4);
+	emitCode(SW, FP, SP, 0);
+	// set FP to SP
+	emitCode(ADD, FP, 0, SP);
+	// move SP (loadsize = local variables)
+	emitCode(ADDI, SP, SP, loadSize * -1);
+}
+
+void epilogue(int paramSize) {
+	emitCode(ADD, SP, 0, FP);
+	// pop FP
+	emitCode(LDW, FP, SP, 0);
+	emitCode(ADDI, SP, SP, 4);
+	// pop SP
+	emitCode(LDW, LINK, SP, 0);
+	// deallocate paramsize + 4
+	emitCode(ADDI, SP, SP, paramSize + 4);
+	
+	// return 
+	//emitCode(BR, 0, 0, LINK);
+	emitCode(JR, LINK, 0, 0);
+	emitCode(NOP, 0, 0, 0);
 }
 
 int isSymbolPlusOrMinus() {
@@ -1542,7 +1733,7 @@ void returnStatement() {
         expression();
 
         // save value of expression in return register
-        //emit(ADD, RR, ZR, allocatedRegisters);
+        emitCode(ADD, RR, ZR, allocatedRegisters);
 
         // register for value of expression is not needed anymore
         allocatedRegisters = allocatedRegisters - 1;
