@@ -28,6 +28,7 @@ void variable(int have_asterisk);
 void fixlink(int codeAddress);
 void statement();
 void assignment(int have_asterisk);
+void declaration();
 
 void printCodeArray();
 void syntaxError(int error_code);
@@ -95,6 +96,8 @@ int NOP;	 // addi zr zr 0
 int BREAK;
 //...
 
+int operating_on_pointer;
+
 // start pointer of global symbol table's linked list.
 int* symbolTable;
 
@@ -158,6 +161,8 @@ void initParser() {
 	E_RETURN = 16;
 	E_ELSE = 17;
 	E_VARIABLEORPOCEDURE = 18;
+	
+	returnBranches = 0;
 	
 	lookahead = getSymbol();	
 }
@@ -379,13 +384,44 @@ void setGlobalPointer() {
 	codeLength = save_code_length;
 }
 
+void setStartAddessToMain() {
+	int main_address;
+	int *symbolTableCursor;
+	int save_code_length = codeLength;
+
+     int* identifierCursor;
+   
+     identifierCursor = identifier; 	
+     
+     *identifierCursor = 109; // ASCII code 109 = m
+     identifierCursor = identifierCursor + 1;
+     *identifierCursor = 97; // ASCII code 120 = a
+     identifierCursor = identifierCursor + 1;	
+     *identifierCursor = 105; // ASCII code 105 = i
+     identifierCursor = identifierCursor + 1;	
+     *identifierCursor = 110; // ASCII code 110 = n
+     identifierCursor = identifierCursor + 1;	
+	
+	symbolTableCursor = getSymbolTableEntry();
+	symbolTableCursor = symbolTableCursor + 2;
+	
+	main_address = *symbolTableCursor;
+	
+	codeLength = 26;
+	
+	emitCode(ADDI, LINK, ZR, save_code_length * 4);
+	emitCode(J, 0, 0, main_address);
+		
+	codeLength = save_code_length;
+}
+
 void emitMalloc() {
 
      int* identifierCursor;
    
      identifierCursor = identifier; 
 
-     *identifierCursor = 109; // ASCII code 101 = m
+     *identifierCursor = 109; // ASCII code 109 = m
      identifierCursor = identifierCursor + 1;
      *identifierCursor = 97; // ASCII code 120 = a
      identifierCursor = identifierCursor + 1;
@@ -403,8 +439,8 @@ void emitMalloc() {
 
 	prologue(0);	// 0 local vars
 
-	// load requested mem_size from stack (arg)
-	emitCode(LDW, 2, SP, 8);
+	// load requested mem_size from stack (arg) (1 arg, 8 bytes are LINK and FP)
+	emitCode(LDW, 2, FP, 8);
 
 	// load bump_pointer
 	emitCode(LDW, 1, GP, 4);
@@ -538,11 +574,16 @@ int main() {
     emitCode(NOP,0,0,0);
     
     // jump to end of malloc lib
-    emitCode(J, 0, 0, 25);	// 25 = 4 reserved + j + delay slot + malloc code length
+    emitCode(J, 0, 0, 26);	// 26 = 4 reserved + j + delay slot + malloc code length
     emitCode(NOP, 0, 0, 0);
    
     // load malloc
     emitMalloc();
+          
+    // reserved for jump to main()
+    emitCode(NOP, 0, 0, 0);	// set LINK to BREAK 0 0 0 (end of code)
+    emitCode(NOP, 0, 0, 0);	// jump to main()
+    emitCode(NOP, 0, 0, 0);   // delay slot
     
     // get first symbol from scanner
     getCurrentSymbol(); 
@@ -552,7 +593,10 @@ int main() {
           
     // set GP     
     setGlobalPointer();
-	
+    
+    // jump to main()
+    setStartAddessToMain();		
+		
     // stop code execution
     emitCode(BREAK, 0, 0, 0);
      
@@ -703,8 +747,10 @@ void declaration() {
 	type();
 	debug(E_DECLARATION);
 	if (symbol == IDENTIFIER) {
+	
 		createSymbolTableEntry(allocateLocalVariable());
 		dump_symbol_table(symbolTable);
+		
 		getCurrentSymbol();
 	}
 	else {
@@ -813,15 +859,31 @@ void assignment(int have_asterisk) {
 			// is pointer
 			if (tmp[3] == 1) {
 				if (have_asterisk == 1) {	// dereference
-					emitCode(LDW, allocatedRegisters +1, GP, tmp[2]);
-					emitCode(SW, allocatedRegisters, allocatedRegisters +1, 0);
+					if (tmp[2] < 0) {
+						emitCode(LDW, allocatedRegisters +1, GP, tmp[2]);
+						emitCode(SW, allocatedRegisters, allocatedRegisters +1, 0);
+					} 
+					else {
+						emitCode(LDW, allocatedRegisters +1, FP, tmp[2]);
+						emitCode(SW, allocatedRegisters, allocatedRegisters +1, 0);					
+					}
 				}
 				else {					// ref
-					emitCode(SW, allocatedRegisters, GP, tmp[2]);
+					if (tmp[2] < 0) {
+						emitCode(SW, allocatedRegisters, GP, tmp[2]);
+					}
+					else {
+						emitCode(SW, allocatedRegisters, FP, tmp[2]);
+					}
 				}
 			}
 			else {
-				emitCode(SW, allocatedRegisters, GP, tmp[2]);
+				if (tmp[2] < 0) {
+					emitCode(SW, allocatedRegisters, GP, tmp[2]);
+				}
+				else {
+					emitCode(SW, allocatedRegisters, FP, tmp[2]);
+				}
 			}
 			
 			allocatedRegisters = allocatedRegisters -1;
@@ -895,6 +957,9 @@ int expression() {
     // remember operator symbol
     // must be local variable to work for nested expressions
     int operatorSymbol;
+    
+    int type_prev;
+    int type_curr;
 
     if (symbol == MINUS) {
         sign = 1;
@@ -903,7 +968,9 @@ int expression() {
         sign = 0;
     }
 
+    operating_on_pointer = 0;
     term();
+    type_prev = operating_on_pointer;
 
     // assert: allocatedRegisters == n + 1
 
@@ -915,14 +982,38 @@ int expression() {
         operatorSymbol = symbol;
         getCurrentSymbol();
 
+	   operating_on_pointer = 0;
         term();
+        type_curr = operating_on_pointer;
+
+	   if(type_prev == 1) {
+		     if(type_curr == 1) {
+				// current and previous are pointers - do nothing
+			} else {
+				// previous is pointer - multiply current
+				// temporarily allocate one new register to hold the constant (because there is no MULI)
+				    emitCode(ADDI, allocatedRegisters + 1, ZR, 4);
+	        		    emitCode(MUL, allocatedRegisters, allocatedRegisters, allocatedRegisters + 1);
+			}
+	   } else {
+			if(type_curr == 1) {
+				// current is pointers - multiply previous
+				// temporarily allocate one new register to hold the constant (because there is no MULI)
+				    emitCode(ADDI, allocatedRegisters + 1, ZR, 4);
+	        		    emitCode(MUL, allocatedRegisters-1, allocatedRegisters-1, allocatedRegisters + 1);
+			} else {
+				// no pointers involved - do nothing
+			}
+ 	   }
+
+	   type_prev = type_curr;
 
         if (operatorSymbol == PLUS) {
             emitCode(ADD, allocatedRegisters - 1, allocatedRegisters - 1, allocatedRegisters);
         }
         else {
             emitCode(SUB, allocatedRegisters - 1, allocatedRegisters - 1, allocatedRegisters);
-		}
+	   }
 
         allocatedRegisters = allocatedRegisters - 1;
     }
@@ -993,7 +1084,9 @@ void factor() {
     // have we parsed an asterisk sign?
     // must be local variable to work for nested expressions
     int dereference;
-
+    int var_offset = getGlobalVariableOffset();
+    int* symbolTableCursor;
+    
     cast();
 
     if (symbol == ASTERISK) {
@@ -1005,6 +1098,7 @@ void factor() {
         dereference = 0;
     }
 
+	// TODO local variables!!
     if (symbol == IDENTIFIER) {
     	   // call
     	   if (lookahead == LPARENS) {
@@ -1012,11 +1106,27 @@ void factor() {
     	   }
     	   // variable
     	   else {
-		   allocatedRegisters = allocatedRegisters + 1;
-		   
-		   emitCode(LDW, allocatedRegisters, GP, getGlobalVariableOffset());
-		   
-		   getCurrentSymbol();
+    	   	   if (var_offset < 0) {
+			   allocatedRegisters = allocatedRegisters + 1;
+			   
+			   emitCode(LDW, allocatedRegisters, GP, var_offset);
+			      
+			   symbolTableCursor = getSymbolTableEntry();
+			   symbolTableCursor = symbolTableCursor + 3; // type field
+		        if(*symbolTableCursor == 1) {
+			   	operating_on_pointer = 1;
+			   }
+			   
+			   getCurrentSymbol();
+		   }
+		   else {
+		   		// TODO local pointer arith like above
+		   	   allocatedRegisters = allocatedRegisters + 1;
+		   	   
+		   	   emitCode(LDW, allocatedRegisters, FP, var_offset);
+			   
+			   getCurrentSymbol();
+		   }
         }
     } 
     else if (symbol == INTEGER) {
@@ -1039,8 +1149,10 @@ void factor() {
         syntaxError(E_FACTOR); // identifier, integer, or left parenthesis expected!
     }
 
-    if (dereference)
+    if (dereference) {
         emitCode(LDW, allocatedRegisters, allocatedRegisters, 0);
+        operating_on_pointer = 0;
+    }
 
     // assert: allocatedRegisters == n + 1
 }
@@ -1502,7 +1614,6 @@ void procedure(int have_asterisk) {
 
 		// create symbol table entry for procedure
 		callBranches = setProcedureAddress();
-		//createSymbolTableEntry(0);
 
 		// enter a local variable context
 		allocatedLocalVariables = 0;
@@ -1513,15 +1624,18 @@ void procedure(int have_asterisk) {
 
 		getCurrentSymbol();
 
+		printf("CALL BRANCHES CODE L: %d %d\n", callBranches, codeLength);
 
-        //if (callBranches != codeLength) {
-        //    if (getOpcodeFromCode(callBranches) == BSR)
-        //        fixlink(callBranches);
-        //    }
-        //    else {
-                // procedure defined more than once!
-        //        declarationError(PROCEDURE);
-        //    }
+          if (callBranches != codeLength) {
+             if (getOpcodeFromCode(callBranches) == BSR) {
+                // fixlink(callBranches);
+             }
+          }
+          else {
+             // procedure defined more than once!
+             //declarationError(PROCEDURE);
+             printf("ERROR procedure defined more than once!\n\n");
+          }
 
 		if (symbol == LPARENS) {
 			
@@ -1585,7 +1699,7 @@ void procedure(int have_asterisk) {
             }
 
             // procedure prologue
-		 // prologue(localVariables * 4);
+		  prologue(localVariables * 4);
 
             // save return address
             //emit(PSH, LINK, SP, 4);
@@ -1612,10 +1726,11 @@ void procedure(int have_asterisk) {
 		  
             getCurrentSymbol();
 
-            // procedure epilogue
-		 // epilogue(parameters * 4);
+		  // set return address
+            fixlink(returnBranches);
 
-            //fixlink(returnBranches);
+            // procedure epilogue
+		  epilogue(parameters * 4);
 
             // deallocate callee's frame and local variables
             //emit(ADD, SP, ZR, FP);
@@ -1650,7 +1765,7 @@ void procedure(int have_asterisk) {
 }
 
 void prologue(int loadSize) {
-	// push SP
+	// push LINK
 	emitCode(ADDI, SP, SP, -4);
 	emitCode(SW, LINK, SP, 0);
 	// push FP
@@ -1669,8 +1784,10 @@ void epilogue(int paramSize) {
 	emitCode(ADDI, SP, SP, 4);
 	// pop SP
 	emitCode(LDW, LINK, SP, 0);
-	// deallocate paramsize + 4
-	emitCode(ADDI, SP, SP, paramSize + 4);
+	emitCode(ADDI, SP, SP, 4);
+	
+	// deallocate paramsize
+	emitCode(ADDI, SP, SP, paramSize);
 	
 	// return 
 	//emitCode(BR, 0, 0, LINK);
@@ -1698,16 +1815,33 @@ int isSymbolAsteriskOrSlash() {
 	return 0;
 }
 
-
 //-----------------------------
 
 //Fixup a whole chain of branch instructions.
+
+int getParameterCFromCode(int codeAddress) {
+	int *codecursor;
+	int shift;
+	int high_bits;
+	int parameterC;
+
+	codecursor = code;
+	codecursor = codecursor + codeAddress;
+		
+	parameterC = *codecursor;
+	
+	shift = m_pow(26);
+	high_bits = (parameterC / shift) * m_pow(26);								
+	parameterC = parameterC - high_bits;
+	
+	return parameterC; 						
+}
 
 void fixlink(int codeAddress) {
     int previousCodeAddress;
 
     while (codeAddress != 0) {
-        //previousCodeAddress = getParameterCFromCode(codeAddress);
+        previousCodeAddress = getParameterCFromCode(codeAddress);
 
         fixup(codeAddress);
 
@@ -1741,10 +1875,11 @@ void returnStatement() {
 
     // unconditional branch to procedure epilogue
     // maintain fixup chain for later fixup
-    //emit(BR, 0, 0, returnBranches);
+    emitCode(BR, 0, 0, returnBranches);
+    emitCode(NOP, 0, 0, 0);
 
-    // new head of fixup chain
-    returnBranches = codeLength - 1;
+    // new head of fixup chain (-2 = BR + NOP)
+    returnBranches = codeLength - 2;
 
     // assert: allocatedRegisters == 0
 }

@@ -20,23 +20,23 @@ int main () {
 	i 		= 0;
 
 	*cdata 	= 12;				// init data with some numbers
-	cdata = cdata + 4;
+	cdata = cdata + 1;
 	*cdata 	= -12;
-	cdata = cdata + 4;
+	cdata = cdata + 1;
 	*cdata 	= 100;
-	cdata = cdata + 4;
+	cdata = cdata + 1;
 	*cdata 	= -905567890;
-	cdata = cdata + 4;
+	cdata = cdata + 1;
 	*cdata 	= -1024;
-	cdata = cdata + 4;
+	cdata = cdata + 1;
 	*cdata 	= 1234567890;
-	cdata = cdata + 4;
+	cdata = cdata + 1;
 	*cdata 	= -904567890;
-	cdata = cdata + 4;
+	cdata = cdata + 1;
 	*cdata 	= -0;
-	cdata = cdata + 4;
+	cdata = cdata + 1;
 	*cdata 	= 0;
-	cdata = cdata + 4;
+	cdata = cdata + 1;
 	*cdata 	= -1;
 
 	cdata = data; 				// reset cursor to data
@@ -48,17 +48,17 @@ int main () {
 		if (*cdata > max) {
 			max = *cdata;
 		}
-		cdata = cdata + 4;		// move cursor by 1 element (4 bytes)
+		cdata = cdata + 1;		// move cursor by 1 element (4 bytes)
 		i = i + 1;
 	}
 
 	*cminmax = min;  			// store min. value at 0th position in minmax
-	cminmax = cminmax + 4;
+	cminmax = cminmax + 1;
 	*cminmax = max;				// store max. value at 1st position in minmax
 
 	cminmax = minmax;
 
 	*cminmax = *cminmax + 0;		// result: 0xca06216e = -905567890
-	cminmax = cminmax + 4;
+	cminmax = cminmax + 1;
 	*cminmax = *cminmax + 0;		// result: 0x499602d2 = 1234567890
 }
