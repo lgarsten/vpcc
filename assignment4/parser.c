@@ -56,6 +56,7 @@ int bump_pointer;
 // compile-time, bump pointer allocation of global and local variables
 int allocatedGlobalVariables;
 int allocatedLocalVariables;
+int allocatedParamters;
 
 // opcodes
 int ADD;
@@ -97,6 +98,7 @@ int BREAK;
 //...
 
 int operating_on_pointer;
+int isParameter;
 
 // start pointer of global symbol table's linked list.
 int* symbolTable;
@@ -163,6 +165,7 @@ void initParser() {
 	E_VARIABLEORPOCEDURE = 18;
 	
 	returnBranches = 0;
+	isParameter = 0;
 	
 	lookahead = getSymbol();	
 }
@@ -401,6 +404,7 @@ void setStartAddessToMain() {
      identifierCursor = identifierCursor + 1;	
      *identifierCursor = 110; // ASCII code 110 = n
      identifierCursor = identifierCursor + 1;	
+     *identifierCursor = 0; // end of identifier
 	
 	symbolTableCursor = getSymbolTableEntry();
 	symbolTableCursor = symbolTableCursor + 2;
@@ -504,6 +508,7 @@ int main() {
 
     allocatedRegisters = 0;
     allocatedGlobalVariables = 0;
+    allocatedParamters = 0;
     allocatedLocalVariables = -1;
 
     ADD = 32; // opcode for ADD
@@ -626,8 +631,8 @@ int createSymbolTableEntry(int data) {
 	// add current identifier as symbol into symbol table
     int* symbolTableCursor;
 
-    // 1 list pointer, 1 identifier pointer, 1 data integer, 1 unused field
-    symbolTableCursor = mipster_malloc(4 * 4);
+    // 1 list pointer, 1 identifier pointer, 1 data integer, 1 is pointer, 1 is parameter
+    symbolTableCursor = mipster_malloc(4 * 5);
 
     // create entry at head of symbol table
     // cast only works if size of int and int* is equivalent
@@ -645,6 +650,9 @@ int createSymbolTableEntry(int data) {
     
     symbolTableCursor = symbolTable + 3;
     *symbolTableCursor = is_pointer;  
+    
+    symbolTableCursor = symbolTable + 4;
+    *symbolTableCursor = isParameter;  
 
     return data;
 }
@@ -848,7 +856,7 @@ void assignment(int have_asterisk) {
 		
 	if (symbol == IDENTIFIER) {
 
-		int *tmp = getSymbolTableEntry();
+		int *symbol_data = getSymbolTableEntry();
 				
 		getCurrentSymbol();
 		if (symbol == ASSIGN) {
@@ -857,32 +865,42 @@ void assignment(int have_asterisk) {
 			expression();
 			
 			// is pointer
-			if (tmp[3] == 1) {
+			if (symbol_data[3] == 1) {
 				if (have_asterisk == 1) {	// dereference
-					if (tmp[2] < 0) {
-						emitCode(LDW, allocatedRegisters +1, GP, tmp[2]);
+					if (symbol_data[2] < 0) {
+						emitCode(LDW, allocatedRegisters +1, GP, symbol_data[2]);
 						emitCode(SW, allocatedRegisters, allocatedRegisters +1, 0);
 					} 
 					else {
-						emitCode(LDW, allocatedRegisters +1, FP, tmp[2]);
-						emitCode(SW, allocatedRegisters, allocatedRegisters +1, 0);					
+						if (symbol_data[4] > 0)
+							emitCode(SW, allocatedRegisters, FP, symbol_data[2]);
+						else 
+							emitCode(SW, allocatedRegisters, FP, symbol_data[2] * -1);	
+						
+					emitCode(SW, allocatedRegisters, allocatedRegisters +1, 0);					
 					}
 				}
 				else {					// ref
-					if (tmp[2] < 0) {
-						emitCode(SW, allocatedRegisters, GP, tmp[2]);
+					if (symbol_data[2] < 0) {
+						emitCode(SW, allocatedRegisters, GP, symbol_data[2]);
 					}
 					else {
-						emitCode(SW, allocatedRegisters, FP, tmp[2]);
+						if (symbol_data[4] > 0)
+							emitCode(SW, allocatedRegisters, FP, symbol_data[2]);
+						else 
+							emitCode(SW, allocatedRegisters, FP, symbol_data[2] * -1);	
 					}
 				}
 			}
 			else {
-				if (tmp[2] < 0) {
-					emitCode(SW, allocatedRegisters, GP, tmp[2]);
+				if (symbol_data[2] < 0) {
+					emitCode(SW, allocatedRegisters, GP, symbol_data[2]);
 				}
-				else {
-					emitCode(SW, allocatedRegisters, FP, tmp[2]);
+				else {	// is parameter or local variable
+					if (symbol_data[4] > 0)
+						emitCode(SW, allocatedRegisters, FP, symbol_data[2]);
+					else 
+						emitCode(SW, allocatedRegisters, FP, symbol_data[2] * -1);	
 				}
 			}
 			
@@ -1121,9 +1139,15 @@ void factor() {
 		   }
 		   else {
 		   		// TODO local pointer arith like above
+		   	   symbolTableCursor = getSymbolTableEntry();
+		   	   symbolTableCursor = symbolTableCursor + 4; // type field
+		   	   
 		   	   allocatedRegisters = allocatedRegisters + 1;
 		   	   
-		   	   emitCode(LDW, allocatedRegisters, FP, var_offset);
+		   	   if (*symbolTableCursor > 0)
+		   	       emitCode(LDW, allocatedRegisters, FP, var_offset);
+		   	   else
+		   	   	  emitCode(LDW, allocatedRegisters, FP, var_offset * -1);
 			   
 			   getCurrentSymbol();
 		   }
@@ -1187,15 +1211,28 @@ int allocateGlobalVariable() {
 }
 
 int allocateLocalVariable() {
+	int offset;
+	offset = 0;
+	
 	if(allocatedLocalVariables == -1) {
 		// FIXME: this is a parser error - trying to allocate a local variable when no local context exists
 		printf("[PARSER] ERROR: trying to allocate a local variable when no local context exists - allocating as global instead!\n");
 		return allocateGlobalVariable();
 	}
-    allocatedLocalVariables = allocatedLocalVariables + 1;
+    
+
+    if (isParameter == 1) {
+    	   allocatedParamters = allocatedParamters + 1;
+        offset = (4 * allocatedParamters) + 4;
+    }
+    else {
+    	   allocatedLocalVariables = allocatedLocalVariables + 1;
+    	   offset = (4 * allocatedLocalVariables);
+    }
 
     // each variable needs 4 bytes, local variable offsets are positive
-    return 4 * allocatedLocalVariables;
+   // return 4 * allocatedLocalVariables;
+   return offset;
 }
 //-----------------------------
 
@@ -1437,6 +1474,7 @@ void call() {
 
         if (symbol == LPARENS) {
             getCurrentSymbol();
+		  
 
             if (symbol != RPARENS) {
                 expression();
@@ -1475,6 +1513,9 @@ void call() {
             } else {
                 getCurrentSymbol();
             }
+            
+       	  
+       	  
         } else {
             syntaxError(E_CALL); // left parenthesis expected!
         }
@@ -1616,6 +1657,7 @@ void procedure(int have_asterisk) {
 		callBranches = setProcedureAddress();
 
 		// enter a local variable context
+		allocatedParamters = 0;
 		allocatedLocalVariables = 0;
 		global_symbol_table = symbolTable;
 		printf("[PARSER] last entry of global symbol table: %d\n", global_symbol_table);
@@ -1636,7 +1678,9 @@ void procedure(int have_asterisk) {
              //declarationError(PROCEDURE);
              printf("ERROR procedure defined more than once!\n\n");
           }
-
+          
+		isParameter = 1;
+		
 		if (symbol == LPARENS) {
 			
 			getCurrentSymbol();
@@ -1671,6 +1715,9 @@ void procedure(int have_asterisk) {
             } else {  	 
                 getCurrentSymbol();
             }
+            
+        isParameter = 0;
+                   
         } else {
             syntaxError(E_PROCEDURE); // left parenthesis expected!
         }
@@ -1756,6 +1803,7 @@ void procedure(int have_asterisk) {
 		dump_symbol_table(symbolTable);
 		symbolTable = global_symbol_table;
 		allocatedLocalVariables = -1;
+		allocatedParamters = 0;
 		printf("[PARSER] clearing local symbol table entries (reverting to %d)\n", symbolTable);
 		dump_symbol_table(symbolTable);
 	}
