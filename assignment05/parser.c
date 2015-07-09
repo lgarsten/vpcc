@@ -29,6 +29,7 @@ void fixlink(int codeAddress);
 void statement();
 void assignment(int have_asterisk);
 void declaration();
+void fixProcedureLink(int jumpAddress);
 
 void printCodeArray();
 void syntaxError(int error_code);
@@ -255,7 +256,7 @@ int encodeInstruction(int op, int a, int b, int c) {
 		encoded_instruction = (b * m_pow(21)) + (c * m_pow(16)) + (a * m_pow(11)) + (0 * m_pow(6)) + op; 
 	}
 	else if (op == SUB) {
-	    	if (integer != -2147483648) {	// FIX integer overflow TODO test..
+	    	if (integer != -2147483648) {	// FIX integer overflow 
 			encoded_instruction = (b * m_pow(21)) + (c * m_pow(16)) + (a * m_pow(11)) + (0 * m_pow(6)) + op;
 		}
 	}
@@ -464,34 +465,6 @@ void emitMalloc() {
 	epilogue(1 * 4);	// 1 arg: mem_size
 }
 
-void emitExit() {
-    int* identifierCursor;
-
-    // "exit" is 4 characters plus null termination
-    identifier = mipster_malloc(5 * 4);
-
-    identifierCursor = identifier;
-
-    *identifierCursor = 101; // ASCII code 101 = e
-    identifierCursor = identifierCursor + 1;
-    *identifierCursor = 120; // ASCII code 120 = x
-    identifierCursor = identifierCursor + 1;
-    *identifierCursor = 105; // ASCII code 105 = i
-    identifierCursor = identifierCursor + 1;
-    *identifierCursor = 116; // ASCII code 116 = t
-    identifierCursor = identifierCursor + 1;
-    *identifierCursor = 0; // end of identifier
-
-    // current code length is address of next instruction
-    createSymbolTableEntry(codeLength);
-
-    // retrieve error code from stack into register 1
-    //emitCode(LDW, 1, SP, 0);
-
-    // halt machine, return error code from register 1
-    //emitCode(HLT, 0, 0, 1);
-}
-
 int main() {
 	
     // pick some maximum identifier length, e.g. 42 characters
@@ -548,24 +521,6 @@ int main() {
     code = mipster_malloc(maxCodeLength * 4);
     codeLength = 0;
     is_pointer = 0;
-
-    // start executing by branching to main procedure
-    // please do not forget: parameter c requires fixup
-    // when code location for main procedure is known
-    //emitCode(BSR, 0, 0, 0);
-
-    // push exit code in return register onto stack
-    //emitCode(PSH, RR, SP, 4);
-
-    // halt machine by invoking exit
-    
-    //emitCode(BSR, 0, 0, codeLength + 1);
-
-    // emit library code for exit right here
-    //emitExit();
-   
-    // similarly, emit library code for malloc, getchar, and putchar
-    //...
     
     // init scanner
     init_scanner();
@@ -706,13 +661,13 @@ int identifierMatch(int* symbolTableIdentifier) {
     }
 }
 
-
+// set correct function parameter offsets after every parameter is parsed
 int correctParameterOffsets(int parameters) {
 	int *symbolTableCursor;
 	int i;
 	int offset;
 	
-	offset = 4 + 4;
+	offset = 4 + 4;	// last parameter has lowest offset + 4
 	i = 0;
 	
 	symbolTableCursor = symbolTable;
@@ -815,6 +770,8 @@ int type() {
 		if (symbol == ASTERISK) {
 			is_pointer = 1;
 			getCurrentSymbol();
+		} else {
+			is_pointer = 0;
 		}
 		return 1;
 	}
@@ -863,7 +820,7 @@ void statement() {
 			getCurrentSymbol();
 		}
 	}
-	// Local variables dont have to be declared on top of the function (TODO mb remove because not in EBNF)
+	// Local variables dont have to be declared on top of the function (TODO not implemented)
 	else if (symbol == INT) {
 		declaration();
 		getCurrentSymbol();
@@ -885,15 +842,14 @@ void assignment(int have_asterisk) {
 			getCurrentSymbol();
 			
 			expression();
-			
-			// is pointer
-			if (symbol_data[3] == 1) {	
+						
+			if (symbol_data[3] == 1) {	// integer pointer	
 				if (have_asterisk == 1) {	// dereference
-					if (symbol_data[2] < 0) {	// global
+					if (symbol_data[2] < 0) {	// global variable
 						emitCode(LDW, allocatedRegisters +1, GP, symbol_data[2]);
 						emitCode(SW, allocatedRegisters, allocatedRegisters +1, 0);
 					} 		
-					else {	// local
+					else {					// local variable
 						if (symbol_data[4] > 0) {	// parameter
 							emitCode(LDW, allocatedRegisters +1, FP, symbol_data[2]);
 						}
@@ -904,7 +860,7 @@ void assignment(int have_asterisk) {
 					emitCode(SW, allocatedRegisters, allocatedRegisters +1, 0);					
 					}
 				}
-				else {					// ref
+				else {					// reference
 					if (symbol_data[2] < 0) {
 						emitCode(SW, allocatedRegisters, GP, symbol_data[2]);
 					}
@@ -916,14 +872,14 @@ void assignment(int have_asterisk) {
 					}
 				}
 			}	
-			else {
+			else {					// integer type
 				if (symbol_data[2] < 0) {
 					emitCode(SW, allocatedRegisters, GP, symbol_data[2]);
 				}
-				else {	// is parameter or local variable
+				else {	// parameter
 					if (symbol_data[4] > 0)
 						emitCode(SW, allocatedRegisters, FP, symbol_data[2]);
-					else 
+					else // local variable
 						emitCode(SW, allocatedRegisters, FP, symbol_data[2] * -1);	
 				}
 			}
@@ -1089,7 +1045,7 @@ void term() {
             emitCode(MUL, allocatedRegisters - 1, allocatedRegisters - 1, allocatedRegisters);
         }
         else {
-            emitCode(DIV, allocatedRegisters - 1, allocatedRegisters , 0);	// TODO fix LO, HI
+            emitCode(DIV, allocatedRegisters - 1, allocatedRegisters , 0);	// fix LO, HI
             emitCode(MFLO,allocatedRegisters -1, 0, 0);
             //emitCode(MFHI,allocatedRegisters -1, 0, 0);
         }
@@ -1154,7 +1110,7 @@ void factor() {
 			      
 			   symbolTableCursor = getSymbolTableEntry();
 			   symbolTableCursor = symbolTableCursor + 3; // type field
-		        if(*symbolTableCursor == 1) {
+		        if (*symbolTableCursor == 1) {
 			   	operating_on_pointer = 1;
 			   }
 			   
@@ -1164,7 +1120,7 @@ void factor() {
 		   	   symbolTableCursor = getSymbolTableEntry();
 		   	   
 		   	   symbolTableCursor = symbolTableCursor + 3; // type field
-		        if(*symbolTableCursor == 1) {
+		        if (*symbolTableCursor == 1) {
 			   	operating_on_pointer = 1;
 			   }
 		   	   
@@ -1243,7 +1199,7 @@ int allocateLocalVariable() {
 	offset = 0;
 	
 	if(allocatedLocalVariables == -1) {
-		// FIXME: this is a parser error - trying to allocate a local variable when no local context exists
+		// this is a parser error - trying to allocate a local variable when no local context exists
 		printf("[PARSER] ERROR: trying to allocate a local variable when no local context exists - allocating as global instead!\n");
 		return allocateGlobalVariable();
 	}
@@ -1259,7 +1215,6 @@ int allocateLocalVariable() {
     }
 
     // each variable needs 4 bytes, local variable offsets are positive
-   // return 4 * allocatedLocalVariables;
    return offset;
 }
 //-----------------------------
@@ -1307,7 +1262,6 @@ void whileStatement() {
  	   
         emitCode(branchInstruction, allocatedRegisters, 0, 0);
         emitCode(NOP,0,0,0);
-
 
         // do not need the register for comparison anymore
         allocatedRegisters = allocatedRegisters - 1;	
@@ -1444,7 +1398,6 @@ void ifStatement() {
     fixup(branchForwardToEndOfIf);         
 }
 
-
 void fixup(int codeAddress) {
 	// assert: -2^15 <= codeLength - codeAddress <= 2^15 - 1
 
@@ -1491,7 +1444,6 @@ void call() {
 
         // save allocated registers on stack
         while (allocatedRegisters > 0) {
-            //emit(PSH, allocatedRegisters, SP, 4);
 		  emitCode(ADDI, SP, SP, -4);
 	       emitCode(SW, allocatedRegisters, SP, 0);
 	       
@@ -1501,14 +1453,12 @@ void call() {
         // assert: allocatedRegisters == 0
 
         if (symbol == LPARENS) {
-            getCurrentSymbol();
-		  
+            getCurrentSymbol();	  
 
             if (symbol != RPARENS) {
                 expression();
 
                 // push value of expression (actual parameter) onto stack
-                //emit(PSH, allocatedRegisters, SP, 4);
 		  	 emitCode(ADDI, SP, SP, -4);
 	      	 emitCode(SW, allocatedRegisters, SP, 0);
 	      	 
@@ -1522,7 +1472,6 @@ void call() {
                     expression();
 
                     // push value of expression (actual parameter) onto stack
-                    //emit(PSH, allocatedRegisters, SP, 4);
 		  	 	emitCode(ADDI, SP, SP, -4);
 	      	 	emitCode(SW, allocatedRegisters, SP, 0);
 	      	 
@@ -1540,9 +1489,7 @@ void call() {
                 }
             } else {
                 getCurrentSymbol();
-            }
-            
-       	  
+            }      	  
        	  
         } else {
             syntaxError(E_CALL); // left parenthesis expected!
@@ -1555,19 +1502,13 @@ void call() {
 
         procedureAddress = setProcedureAddress();
 	
-	  // function call but declaration is missing 
+	  // function call but declaration is missing, not possible
         if (procedureAddress == codeLength) {
-            // create a new fixup chain
-            //emit(BSR, 0, 0, 0);
-            emitCode(JAL, 0, 0, 0);
+            //emitCode(JAL, 0, 0, codeLength);
+            printf("ERROR: Procedure called without forward declaration!\n");
         } 
-        else if (getOpcodeFromCode(procedureAddress) == BSR) {
-            // link to the head of an existing fixup chain
-            //emit(BSR, 0, 0, procedureAddress);
-        }
         else {
             // branch to subroutine to invoke procedure
-            //emit(BSR, 0, 0, procedureAddress - codeLength);
             emitCode(JAL, 0, 0, procedureAddress);
             emitCode(NOP, 0, 0, 0);
         }
@@ -1577,7 +1518,6 @@ void call() {
       	while (allocatedRegisters < savedAllocatedRegisters) {
           	allocatedRegisters = allocatedRegisters + 1;
 			
-      	     //emit(POP, allocatedRegisters, SP, 4);
       	     emitCode(LDW, allocatedRegisters, SP, 0);
 			emitCode(ADDI, SP, SP, 4);
           }
@@ -1610,13 +1550,6 @@ int setProcedureAddress() {
 		symbolTableCursor = symbolTableCursor + 2;
 
 		savedAddress = *symbolTableCursor;
-
-		if (getOpcodeFromCode(savedAddress) == BSR) {
-			// save address of next instruction which may point to
-			// the new head of an existing fixup chain
-			// or the beginning of a procedure body
-			*symbolTableCursor = codeLength;
-		}
 
 		return savedAddress;
 	} else {
@@ -1651,37 +1584,23 @@ int getOpcodeFromCode(int address) {
 
 void procedure(int have_asterisk) {
 	debug(E_PROCEDURE);
-    // assert: allocatedRegisters == 0
+     // assert: allocatedRegisters == 0
 
-    // may be global variables but are anyway nicer like that
-    int callBranches;
-    int parameters;
-    int localVariables;
+     // may be global variables but are anyway nicer like that
+     int callBranches;
+     int parameters;
+     int localVariables;
 
 	int *global_symbol_table;
 
 	// back up start of global symbol table
 	global_symbol_table = 0; // not yet, only after symbol of the procedure itself is added
 
-	//  if (symbol == INTEGER) {
-	//      getCurrentSymbol();
-	//
-	//      if (symbol == ASTERISK) {
-	//          getCurrentSymbol();
-	//      }
-	//  } 
-	//  else if (symbol == VOID) {
-	//      getCurrentSymbol();
-	//  }
-	//  else {
-	//      syntaxError(PROCEDURE); // int expected!
-	//  }
-
 	if (symbol == IDENTIFIER) {
 
 		// create symbol table entry for procedure
 		callBranches = setProcedureAddress();
-
+		
 		// enter a local variable context
 		allocatedParamters = 0;
 		allocatedLocalVariables = 0;
@@ -1690,22 +1609,22 @@ void procedure(int have_asterisk) {
 
 		dump_symbol_table(symbolTable);
 
-		getCurrentSymbol();
-
+		// correct address if procedure was forwared declared
           if (callBranches != codeLength) {
-             if (getOpcodeFromCode(callBranches) == BSR) {
-                // fixlink(callBranches);
-             }
+          	fixProcedureLink(codeLength);
           }
           else {
-             // procedure defined more than once!
-             //declarationError(PROCEDURE);
-             printf("ERROR procedure defined more than once!\n\n");
+             // procedure found without forward declaration
           }
           
-		isParameter = 1;
-		
+          // correct symboltable address if procedure is parsed without body
+          emitCode(NOP,0,0,0);
+          
+          getCurrentSymbol();
+          		
 		if (symbol == LPARENS) {
+			
+			isParameter = 1;
 			
 			getCurrentSymbol();
 
@@ -1888,17 +1807,60 @@ int getParameterCFromCode(int codeAddress) {
 	return parameterC; 						
 }
 
+void fixProcedureLink(int jumpAddress) {
+	int *codecursor = code;
+	int i = 0;
+	int opcode = 0;
+	int *symbolTableCursor;
+	int fixup_address;
+	int paramC = 0;
+	
+	symbolTableCursor = getSymbolTableEntry();
+	symbolTableCursor = symbolTableCursor + 2;
+	fixup_address = *symbolTableCursor;
+	*symbolTableCursor = jumpAddress;
+	
+	while (i < codeLength) {
+		opcode = getOpcodeFromCode(i);
+		
+		if (opcode == JAL) {
+			paramC = getParameterCFromCode(i);
+			if (paramC == fixup_address) {
+				setParameterCInCode(i, jumpAddress - fixup_address);
+			}
+		}
+		codecursor = codecursor +1;
+		i = i +1;
+	}
+}
+
 void fixlink(int codeAddress) {
     int previousCodeAddress;
 
     while (codeAddress != 0) {
         previousCodeAddress = getParameterCFromCode(codeAddress);
 
-        fixup(codeAddress);
+        fixupReturn(codeAddress);
 
         codeAddress = previousCodeAddress;
     }
 }
+
+// same as fixup, but set branch address to 0 befor adding correct one
+void fixupReturn(int codeAddress) {
+	int *codecursor;
+	int paramC;
+	int value;
+	
+	value = codeLength - codeAddress;
+	
+	codecursor = code + codeAddress;
+	paramC = getParameterCFromCode(codeAddress);
+	
+	*codecursor = *codecursor - paramC;
+	*codecursor = *codecursor + value -1;	
+}
+
 //-----------------------------
 
 //Return statements only need to make sure that the return value of procedures are stored in RR before returning.
